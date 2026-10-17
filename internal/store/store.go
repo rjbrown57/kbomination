@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -162,14 +161,15 @@ func (s *Store) Import(ctx context.Context, a model.Artifact) (string, error) {
 	return id, tx.Commit()
 }
 
-var purlVersion = regexp.MustCompile(`@[^/@?#]+`)
-
 func componentIdentityText(typ, name, purl, category string) string {
 	if purl != "" {
 		// A PURL's version is the @ segment before qualifiers or subpath.
 		base := strings.SplitN(purl, "?", 2)[0]
 		base = strings.SplitN(base, "#", 2)[0]
-		return "purl:" + purlVersion.ReplaceAllString(base, "")
+		if at := strings.LastIndex(base, "@"); at > strings.LastIndex(base, "/") {
+			base = base[:at]
+		}
+		return "purl:" + base
 	}
 	return "fallback:" + strings.Join([]string{typ, category, name}, "\x00")
 }

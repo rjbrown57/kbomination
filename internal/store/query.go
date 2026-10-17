@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-var queryTables = words("fleets clusters snapshots components component_properties dependencies component_catalog component_catalog_observations component_inventory cluster_metadata latest_snapshots inventory_history latest_inventory runs run_results")
+var queryTables = words("fleets clusters snapshots components component_properties dependencies component_catalog component_catalog_observations component_inventory cluster_metadata app_settings latest_snapshots inventory_history latest_inventory runs run_results")
 var queryFunctions = words("count count_star sum avg min max median quantile_cont quantile_disc stddev stddev_pop variance var_pop first last any_value arg_min arg_max bool_and bool_or string_agg list array_agg array_length len length lower upper trim ltrim rtrim concat concat_ws substring substr replace split_part string_split starts_with ends_with contains regexp_matches regexp_full_match regexp_extract regexp_replace coalesce nullif ifnull if greatest least abs round ceil ceiling floor sqrt power date_trunc date_part date_diff date_sub date_add extract strftime epoch now current_timestamp current_date current_localtimestamp row_number rank dense_rank lag lead first_value last_value ntile percent_rank cume_dist range generate_series unnest")
 
 func words(s string) map[string]bool {

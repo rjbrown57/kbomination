@@ -85,6 +85,13 @@ paths:
   /catalog:
     get:
       summary: List fleet-wide package identities and observed versions
+      parameters:
+        - { in: query, name: name, schema: { type: string } }
+        - { in: query, name: cluster_id, schema: { type: string } }
+        - { in: query, name: version, schema: { type: string } }
+        - { in: query, name: label, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 1000, default: 100 } }
+        - { in: query, name: offset, schema: { type: integer, minimum: 0, default: 0 } }
       responses:
         '200': { description: Component catalog with cluster membership and metadata }
   /catalog/{id}:

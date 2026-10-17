@@ -100,7 +100,7 @@ func (a *API) Handler() http.Handler {
 		a.read(w, r, "SELECT c.*, coalesce(m.labels,'{}') labels,coalesce(m.annotations,'{}') annotations,coalesce(m.notes,'') notes,max(s.collected_at) AS last_collected_at, count(DISTINCT s.id) AS snapshots FROM clusters c LEFT JOIN cluster_metadata m ON m.cluster_id=c.id LEFT JOIN snapshots s ON c.id=s.cluster_id GROUP BY ALL ORDER BY c.name")
 	})
 	mux.HandleFunc("GET /api/v1/catalog", func(w http.ResponseWriter, r *http.Request) {
-		a.read(w, r, "SELECT * FROM component_inventory ORDER BY name")
+		a.catalog(w, r)
 	})
 	mux.HandleFunc("GET /api/v1/catalog/{id}", func(w http.ResponseWriter, r *http.Request) {
 		a.read(w, r, "SELECT * FROM component_inventory WHERE component_id=?", r.PathValue("id"))
@@ -253,6 +253,34 @@ func (a *API) components(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q += " ORDER BY cluster_name,collected_at DESC,name,ref LIMIT ? OFFSET ?"
+	args = append(args, limit, offset)
+	a.read(w, r, q, args...)
+}
+func (a *API) catalog(w http.ResponseWriter, r *http.Request) {
+	q := "SELECT * FROM component_inventory WHERE 1=1"
+	args := []any{}
+	if v := r.URL.Query().Get("name"); v != "" {
+		q += " AND contains(lower(name),lower(?))"
+		args = append(args, v)
+	}
+	if v := r.URL.Query().Get("cluster_id"); v != "" {
+		q += " AND list_contains(cluster_ids,?)"
+		args = append(args, v)
+	}
+	if v := r.URL.Query().Get("version"); v != "" {
+		q += " AND list_contains(versions,?)"
+		args = append(args, v)
+	}
+	if v := r.URL.Query().Get("label"); v != "" {
+		q += " AND contains(labels,?)"
+		args = append(args, v)
+	}
+	limit, offset, err := pagination(r)
+	if err != nil {
+		respond(w, nil, err)
+		return
+	}
+	q += " ORDER BY name,component_id LIMIT ? OFFSET ?"
 	args = append(args, limit, offset)
 	a.read(w, r, q, args...)
 }
