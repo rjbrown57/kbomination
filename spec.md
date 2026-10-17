@@ -46,9 +46,9 @@ The cli uses zap for logging, and has three levels of verbosity(Info,Debug,Trace
 
 ### UI Design
 
-The UI Should have the following views on the left of the page
+The UI Should have the following views on the left of the page. All pages show the logo in the left navigation bar based on the kbomination-logo.png
 
-- Overview : High level view of clusters and components preset in the data set. The overview page shows a simple logo based on kbomination-logo.png
+- Overview : High level view of clusters and components preset in the data set.
 - Clusters : Inspect data by cluster. This should provide a visual overview of the observed cluster and components, and provide a way to click into details about components.
 - Components : Inspect data by component, linking back to clusters
 - Collections : Configuring recurring collections, show history of the collections
