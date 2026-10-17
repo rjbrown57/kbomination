@@ -1,0 +1,22 @@
+replicaCount: 1
+image:
+  repository: kbomination
+  tag: latest
+  pullPolicy: IfNotPresent
+service:
+  port: 8080
+persistence:
+  enabled: true
+  size: 8Gi
+  storageClass: ""
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "2"
+    memory: 1Gi
+kubeconfig:
+  secretName: ""
+  secretKey: config
+  mountPath: /kube/config

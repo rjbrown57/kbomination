@@ -1,0 +1,66 @@
+{{- if ne (int .Values.replicaCount) 1 }}{{ fail "kbomination uses a single DuckDB writer; replicaCount must be 1" }}{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kbomination.name" . }}
+  labels:
+    {{- include "kbomination.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "kbomination.labels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kbomination.labels" . | nindent 8 }}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: kbomination
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["serve", "--listen", "0.0.0.0:8080", "--allow-non-loopback", "--db", "/data/kbomination.duckdb"]
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: 127.0.0.1:8080
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: 127.0.0.1:8080
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            {{- if .Values.kubeconfig.secretName }}
+            - name: kubeconfig
+              mountPath: {{ .Values.kubeconfig.mountPath | quote }}
+              subPath: {{ .Values.kubeconfig.secretKey | quote }}
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "kbomination.name" . }}
+        {{- if .Values.kubeconfig.secretName }}
+        - name: kubeconfig
+          secret:
+            secretName: {{ .Values.kubeconfig.secretName }}
+        {{- end }}

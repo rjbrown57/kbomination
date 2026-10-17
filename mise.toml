@@ -4,6 +4,7 @@ node = "24.8.0"
 trivy = "0.76.0"
 kind = "0.30.0"
 kubectl = "1.34.1"
+helm = "3.17.3"
 
 [tasks.setup]
 run = ["go mod download", "npm --prefix web ci"]
@@ -56,3 +57,11 @@ run = "docker compose ps"
 [tasks."compose:contexts"]
 description = "List kubeconfig contexts from the running container"
 run = "docker compose exec kbomination kbomination contexts"
+
+[tasks."helm:lint"]
+description = "Lint the Kubernetes deployment chart"
+run = "helm lint chart/kbomination"
+
+[tasks."helm:template"]
+description = "Render the Kubernetes deployment chart"
+run = "helm template kbomination chart/kbomination"

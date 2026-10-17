@@ -81,6 +81,19 @@ docker run --rm --init --name kbomination \
 
 The standalone volume name differs from Compose's project-prefixed volume. Run one server per database volume.
 
+### Kubernetes deployment with Helm
+
+Build and publish the container image to a registry your cluster can pull, then install the chart with one persistent replica:
+
+```sh
+helm upgrade --install kbomination ./chart/kbomination \
+  --set image.repository=registry.example/kbomination \
+  --set image.tag=0.1.0
+kubectl port-forward service/kbomination 8080:8080
+```
+
+Open <http://127.0.0.1:8080>. The chart uses a `Recreate` strategy and requires exactly one replica because DuckDB permits one writer. To collect in-cluster, create a Secret containing a container-usable kubeconfig and set `kubeconfig.secretName`; the chart does not grant Kubernetes RBAC automatically. The service is ClusterIP only, with no ingress or shared-user authentication. Treat the port-forward as access to this instance's data and controls.
+
 ## Host prerequisites
 
 Install [mise](https://mise.jdx.dev/). Go, Node, Trivy, kind, and kubectl are pinned in `mise.toml` and run through mise. On a fresh checkout, trust the local mise configuration and install the pinned tools, then run:
@@ -148,6 +161,16 @@ ORDER BY cluster_name, version;
 ```
 
 Queries have a 30-second deadline and a 10,000-row result limit. Functions are allowlisted, and external table and file access, extensions, settings changes, and writes are rejected.
+
+### MCP client
+
+The optional stdio MCP process calls the running local API and does not open DuckDB itself:
+
+```sh
+mise exec -- go run ./cmd/kbomination mcp --server http://127.0.0.1:8080
+```
+
+Configure your MCP client to launch this command with its stdin/stdout connected to the process. It exposes read-only cluster, component, snapshot, run, schema, and guarded SQL tools. Keep MCP client access scoped like direct access to the local UI.
 
 ## Development
 
