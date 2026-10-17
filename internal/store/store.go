@@ -296,11 +296,9 @@ func (s *Store) SetMetadata(ctx context.Context, kind, id string, m Metadata) er
 	}
 	s.write.Lock()
 	defer s.write.Unlock()
-	args := []any{string(labels), string(annotations), m.Notes}
+	args := []any{string(labels), string(annotations), m.Notes, id}
 	if kind == "cluster" {
-		args = append([]any{id})
-	} else {
-		args = []any{string(labels), string(annotations), m.Notes, id}
+		args = []any{id, string(labels), string(annotations), m.Notes}
 	}
 	res, err := s.DB.ExecContext(ctx, q, args...)
 	if err != nil {

@@ -18,6 +18,7 @@ import (
 	"github.com/rjbrown57/kbomination/internal/model"
 	"github.com/rjbrown57/kbomination/internal/store"
 	"github.com/rjbrown57/kbomination/web"
+	"sigs.k8s.io/yaml"
 )
 
 type API struct {
@@ -109,9 +110,28 @@ func (a *API) Handler() http.Handler {
 		a.read(w, r, "SELECT DISTINCT cl.id,cl.name FROM component_catalog_observations co JOIN snapshots s ON s.id=co.snapshot_id JOIN clusters cl ON cl.id=s.cluster_id WHERE co.component_id=? ORDER BY cl.name", r.PathValue("id"))
 	})
 	mux.HandleFunc("PUT /api/v1/metadata/{kind}/{id}", func(w http.ResponseWriter, r *http.Request) {
-		var m store.Metadata
-		if !decode(w, r, &m) {
+		var input struct {
+			Labels          map[string]string `json:"labels"`
+			Annotations     map[string]string `json:"annotations"`
+			LabelsYAML      *string           `json:"labels_yaml"`
+			AnnotationsYAML *string           `json:"annotations_yaml"`
+			Notes           string            `json:"notes"`
+		}
+		if !decode(w, r, &input) {
 			return
+		}
+		m := store.Metadata{Labels: input.Labels, Annotations: input.Annotations, Notes: input.Notes}
+		if input.LabelsYAML != nil {
+			if err := yaml.Unmarshal([]byte(*input.LabelsYAML), &m.Labels); err != nil {
+				respond(w, nil, fmt.Errorf("invalid labels YAML: %w", err))
+				return
+			}
+		}
+		if input.AnnotationsYAML != nil {
+			if err := yaml.Unmarshal([]byte(*input.AnnotationsYAML), &m.Annotations); err != nil {
+				respond(w, nil, fmt.Errorf("invalid annotations YAML: %w", err))
+				return
+			}
 		}
 		err := a.Store.SetMetadata(r.Context(), r.PathValue("kind"), r.PathValue("id"), m)
 		respond(w, map[string]bool{"updated": err == nil}, err)
