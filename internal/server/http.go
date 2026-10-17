@@ -107,7 +107,14 @@ func (a *API) Handler() http.Handler {
 		a.read(w, r, "SELECT * FROM component_inventory WHERE component_id=?", r.PathValue("id"))
 	})
 	mux.HandleFunc("GET /api/v1/catalog/{id}/clusters", func(w http.ResponseWriter, r *http.Request) {
-		a.read(w, r, "SELECT DISTINCT cl.id,cl.name FROM component_catalog_observations co JOIN snapshots s ON s.id=co.snapshot_id JOIN clusters cl ON cl.id=s.cluster_id WHERE co.component_id=? ORDER BY cl.name", r.PathValue("id"))
+		limit, offset, err := pagination(r)
+		if err != nil {
+			respond(w, nil, err)
+			return
+		}
+		name := r.URL.Query().Get("name")
+		q := "WITH cluster_matches AS (SELECT DISTINCT cl.id,cl.name FROM component_catalog_observations co JOIN snapshots s ON s.id=co.snapshot_id JOIN clusters cl ON cl.id=s.cluster_id WHERE co.component_id=? AND (?='' OR contains(lower(cl.name),lower(?)))) SELECT id,name,count(*) OVER() AS total_count FROM cluster_matches ORDER BY name LIMIT ? OFFSET ?"
+		a.read(w, r, q, r.PathValue("id"), name, name, limit, offset)
 	})
 	mux.HandleFunc("PUT /api/v1/metadata/{kind}/{id}", func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
