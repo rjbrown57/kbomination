@@ -24,15 +24,47 @@ The goal is to allow a fleet owner to visualize and query data about the fleet. 
 - allows filtering by regex which clusters are selected from
 - data can be collected on a schedule or on demand via frontend trigger. The schedule can be configured in the frontend as well
 - the server contains a json api that will expose the data to the frontend. Allow querying by cluster
+- data can be consumed by focusing on the components and see which clusters contain them
+- a stdio MCP should be created and usage details exposed
 
+### CLI
+
+The cli uses zap for logging, and has three levels of verbosity(Info,Debug,Trace).
+
+
+#### Available Commands
+
+- collect : Collect KBOMs and optionally ingest them. Built on top of trivy. Local outputs contain the name of the cluster, and the date the kbom was collected. Each clusters data is kept in it's own unique path
+- contexts : List matching kubeconfig contexts used for checking which clusters you will operate against
+- import : Import a collection manifest or an existing KBOM
+- serve : Serve the frontend, API, and scheduler
+- completion : Generate the autocompletion script for the specified shell
+- help : Help about any command
+
+
+### UI Design
+
+The UI Should have the following views on the left of the page
+
+- Overview : High level view of clusters and components preset in the data set. The overview page shows a simple logo based on kbomination-logo.png
+- Clusters : Inspect data by cluster. This should provide a visual overview of the observed cluster and components, and provide a way to click into details about components.
+- Components : Inspect data by component, linking back to clusters
+- Collections : Configuring recurring collections, show history of the collections
+- SQL Workspace : run queries against the db via sql. Provides meaningful examples for the end-user.
+- Settings : show current settings and allow configuration
 
 ### DB Design
 
 * Fleet - the top level grouping
   * Clusters - an individual cluster
-  * From here expand out the meaningful categories within k8s
-
-
-
-
-
+    * a list of components
+    * labels : used for sorting
+    * annotations : used for indicating things to an llm or code tool
+    * notes: user entered notes
+  * components
+    * name:
+    * a list of observed versions
+    * labels : used for sorting
+    * annotations : used for indicating things to an llm or code tool
+    * notes: user entered notes
+    * clusters this component is present in
