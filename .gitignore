@@ -6,3 +6,4 @@
 *.duckdb.lock
 /web/node_modules/
 .DS_Store
+kbomination
