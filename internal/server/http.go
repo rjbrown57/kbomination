@@ -122,6 +122,39 @@ func (a *API) Handler() http.Handler {
 		e := a.Store.SaveSettings(r.Context(), v)
 		respond(w, map[string]bool{"saved": e == nil}, e)
 	})
+	mux.HandleFunc("GET /api/v1/backup", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", `attachment; filename="kbomination-backup.json"`)
+		if err := a.Store.Export(r.Context(), w); err != nil {
+			sendError(w, 500, err)
+		}
+	})
+	mux.HandleFunc("POST /api/v1/backup/preview", func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<30)
+		_, data, err := store.DecodeBackup(r.Body)
+		if err != nil {
+			sendError(w, 400, err)
+			return
+		}
+		counts := map[string]int{}
+		for table, values := range data.Tables {
+			counts[table] = len(values.Rows)
+		}
+		send(w, 200, map[string]any{"valid": true, "version": 1, "records": counts, "replace_requires_confirmation": true})
+	})
+	mux.HandleFunc("POST /api/v1/backup/restore", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("confirm") != "true" {
+			sendError(w, 400, fmt.Errorf("explicit confirmation is required"))
+			return
+		}
+		if a.Manager != nil && a.Manager.HasActive() {
+			sendError(w, 409, fmt.Errorf("wait for active collections to finish before restoring"))
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<30)
+		counts, err := a.Store.Restore(r.Context(), r.Body)
+		respond(w, map[string]any{"restored": err == nil, "records": counts}, err)
+	})
 	mux.HandleFunc("GET /api/v1/snapshots", func(w http.ResponseWriter, r *http.Request) {
 		q := "SELECT id,cluster_id,scope,collected_at,imported_at,trivy_version,sha256 FROM snapshots WHERE 1=1"
 		args := []any{}

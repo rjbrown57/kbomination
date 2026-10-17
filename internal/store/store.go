@@ -27,6 +27,7 @@ var schema string
 
 type Store struct {
 	DB    *sql.DB
+	Path  string
 	write sync.Mutex
 }
 
@@ -70,7 +71,7 @@ func Open(path string) (*Store, error) {
 			return fail(err)
 		}
 	}
-	return &Store{DB: db}, nil
+	return &Store{DB: db, Path: path}, nil
 }
 func (s *Store) Close() error { return s.DB.Close() }
 
@@ -243,6 +244,13 @@ func (s *Store) Profiles(ctx context.Context) ([]model.Profile, error) {
 	return out, rows.Err()
 }
 func (s *Store) SaveProfile(ctx context.Context, p model.Profile) (model.Profile, error) {
+	if p.TimeoutSeconds == 0 {
+		if settings, err := s.Settings(ctx); err == nil {
+			if n, e := strconv.Atoi(settings["default_timeout_seconds"]); e == nil {
+				p.TimeoutSeconds = n
+			}
+		}
+	}
 	if err := p.Validate(); err != nil {
 		return p, err
 	}
@@ -318,7 +326,7 @@ func (s *Store) Settings(ctx context.Context) (map[string]string, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	out := map[string]string{"fleet_name": "Local fleet", "default_timeout_seconds": "900", "log_level": "info"}
+	out := map[string]string{"fleet_name": "Local fleet", "default_timeout_seconds": "900", "log_level": "info", "scheduler_paused": "false"}
 	for rows.Next() {
 		var k, v string
 		if err = rows.Scan(&k, &v); err != nil {
@@ -329,7 +337,7 @@ func (s *Store) Settings(ctx context.Context) (map[string]string, error) {
 	return out, rows.Err()
 }
 func (s *Store) SaveSettings(ctx context.Context, values map[string]string) error {
-	allowed := map[string]bool{"fleet_name": true, "default_timeout_seconds": true, "log_level": true}
+	allowed := map[string]bool{"fleet_name": true, "default_timeout_seconds": true, "log_level": true, "scheduler_paused": true}
 	for k, v := range values {
 		if !allowed[k] {
 			return fmt.Errorf("unknown setting %q", k)
@@ -339,6 +347,9 @@ func (s *Store) SaveSettings(ctx context.Context, values map[string]string) erro
 		}
 		if k == "log_level" && v != "info" && v != "debug" && v != "trace" {
 			return fmt.Errorf("log_level must be info, debug, or trace")
+		}
+		if k == "scheduler_paused" && v != "true" && v != "false" {
+			return fmt.Errorf("scheduler_paused must be true or false")
 		}
 		if k == "default_timeout_seconds" {
 			n, e := strconv.Atoi(v)
@@ -357,6 +368,11 @@ func (s *Store) SaveSettings(ctx context.Context, values map[string]string) erro
 	for k, v := range values {
 		if _, err = tx.ExecContext(ctx, "INSERT INTO app_settings VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", k, v); err != nil {
 			return err
+		}
+		if k == "fleet_name" {
+			if _, err = tx.ExecContext(ctx, "UPDATE fleets SET name=? WHERE id='default'", v); err != nil {
+				return err
+			}
 		}
 	}
 	return tx.Commit()

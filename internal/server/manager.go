@@ -45,7 +45,8 @@ func (m *Manager) Recover(ctx context.Context) error {
 	}
 	return m.Store.Exec(ctx, "UPDATE runs SET status='interrupted',finished_at=current_timestamp WHERE status='running'")
 }
-func (m *Manager) Close() { m.cancel(); m.scheduler.Wait(); m.wg.Wait() }
+func (m *Manager) Close()          { m.cancel(); m.scheduler.Wait(); m.wg.Wait() }
+func (m *Manager) HasActive() bool { m.mu.Lock(); defer m.mu.Unlock(); return len(m.active) > 0 }
 func (m *Manager) Schedule() {
 	m.scheduler.Add(1)
 	go func() {
@@ -66,6 +67,13 @@ func (m *Manager) Schedule() {
 }
 
 func (m *Manager) Tick(now time.Time) error {
+	settings, err := m.Store.Settings(m.ctx)
+	if err != nil {
+		return err
+	}
+	if settings["scheduler_paused"] == "true" {
+		return nil
+	}
 	profiles, err := m.Store.Profiles(m.ctx)
 	if err != nil {
 		return err

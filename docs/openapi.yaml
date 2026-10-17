@@ -82,6 +82,51 @@ paths:
     get:
       responses:
         '200': { description: Cluster inventory summary }
+  /catalog:
+    get:
+      summary: List fleet-wide package identities and observed versions
+      responses:
+        '200': { description: Component catalog with cluster membership and metadata }
+  /catalog/{id}:
+    get:
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Component catalog detail }
+  /metadata/{kind}/{id}:
+    put:
+      summary: Update cluster or component labels, annotations, and notes
+      parameters:
+        - { in: path, name: kind, required: true, schema: { type: string, enum: [cluster, component] } }
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Metadata updated }
+  /settings:
+    get:
+      responses:
+        '200': { description: Local fleet preferences }
+    put:
+      summary: Update local fleet preferences
+      responses:
+        '200': { description: Preferences saved }
+  /backup:
+    get:
+      summary: Download a checksummed application data backup
+      responses:
+        '200': { description: Portable JSON backup }
+  /backup/preview:
+    post:
+      summary: Validate a backup and preview record counts
+      responses:
+        '200': { description: Backup validation result }
+  /backup/restore:
+    post:
+      summary: Replace application data from a validated backup
+      parameters:
+        - { in: query, name: confirm, required: true, schema: { type: boolean, const: true } }
+      responses:
+        '200': { description: Restored data; scheduler is paused }
+        '409': { description: Collection is still active }
   /snapshots:
     get:
       parameters:
