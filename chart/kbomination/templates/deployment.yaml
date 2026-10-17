@@ -1,4 +1,5 @@
 {{- if ne (int .Values.replicaCount) 1 }}{{ fail "kbomination uses a single DuckDB writer; replicaCount must be 1" }}{{- end }}
+{{- if not .Values.persistence.enabled }}{{ fail "kbomination requires persistent storage" }}{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -30,6 +31,11 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+          {{- if .Values.kubeconfig.secretName }}
+          env:
+            - name: KUBECONFIG
+              value: {{ .Values.kubeconfig.mountPath | quote }}
+          {{- end }}
           readinessProbe:
             httpGet:
               path: /api/v1/health
