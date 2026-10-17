@@ -20,6 +20,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/rjbrown57/kbomination/internal/collect"
+	"github.com/rjbrown57/kbomination/internal/mcpserver"
 	"github.com/rjbrown57/kbomination/internal/model"
 	"github.com/rjbrown57/kbomination/internal/server"
 	"github.com/rjbrown57/kbomination/internal/store"
@@ -246,6 +247,10 @@ func root() *cobra.Command {
 	serve.Flags().StringVar(&listen, "listen", "127.0.0.1:8080", "Loopback address to listen on")
 	serve.Flags().BoolVar(&allowNonLoopback, "allow-non-loopback", false, "Allow a non-loopback listening IP (for containers; publish ports only on localhost)")
 	root.AddCommand(serve)
+	var mcpServer string
+	mcpCmd := &cobra.Command{Use: "mcp", Short: "Run a read-only stdio MCP server", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error { return mcpserver.Run(cmd.Context(), mcpServer) }}
+	mcpCmd.Flags().StringVar(&mcpServer, "server", "http://127.0.0.1:8080", "Running local kbomination server URL")
+	root.AddCommand(mcpCmd)
 	return root
 }
 func configureLogger(level string) error {
