@@ -105,6 +105,9 @@ func (a *API) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/catalog/{id}", func(w http.ResponseWriter, r *http.Request) {
 		a.read(w, r, "SELECT * FROM component_inventory WHERE component_id=?", r.PathValue("id"))
 	})
+	mux.HandleFunc("GET /api/v1/catalog/{id}/clusters", func(w http.ResponseWriter, r *http.Request) {
+		a.read(w, r, "SELECT DISTINCT cl.id,cl.name FROM component_catalog_observations co JOIN snapshots s ON s.id=co.snapshot_id JOIN clusters cl ON cl.id=s.cluster_id WHERE co.component_id=? ORDER BY cl.name", r.PathValue("id"))
+	})
 	mux.HandleFunc("PUT /api/v1/metadata/{kind}/{id}", func(w http.ResponseWriter, r *http.Request) {
 		var m store.Metadata
 		if !decode(w, r, &m) {
@@ -241,16 +244,16 @@ func (a *API) components(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("snapshot_id") != "" || r.URL.Query().Get("history") == "true" {
 		view = "inventory_history"
 	}
-	q := "SELECT * FROM " + view + " WHERE 1=1"
+	q := "SELECT inv.*,co.component_id FROM " + view + " inv LEFT JOIN component_catalog_observations co ON co.snapshot_id=inv.snapshot_id AND co.ref=inv.ref WHERE 1=1"
 	args := []any{}
 	for _, key := range []string{"cluster_id", "scope", "namespace", "category", "version", "snapshot_id"} {
 		if v := r.URL.Query().Get(key); v != "" {
-			q += " AND " + key + "=?"
+			q += " AND inv." + key + "=?"
 			args = append(args, v)
 		}
 	}
 	if v := r.URL.Query().Get("name"); v != "" {
-		q += " AND contains(lower(name),lower(?))"
+		q += " AND contains(lower(inv.name),lower(?))"
 		args = append(args, v)
 	}
 	limit, offset, err := pagination(r)
@@ -258,7 +261,7 @@ func (a *API) components(w http.ResponseWriter, r *http.Request) {
 		respond(w, nil, err)
 		return
 	}
-	q += " ORDER BY cluster_name,collected_at DESC,name,ref LIMIT ? OFFSET ?"
+	q += " ORDER BY inv.cluster_name,inv.collected_at DESC,inv.name,inv.ref LIMIT ? OFFSET ?"
 	args = append(args, limit, offset)
 	a.read(w, r, q, args...)
 }
