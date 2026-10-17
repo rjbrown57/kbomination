@@ -181,8 +181,11 @@ mise run build
 mise run test
 mise run e2e       # disposable local kind cluster
 mise run testenv   # persistent kind demo cluster, sample collection, and local UI
+mise run sample-db # import checked-in sample KBOMs into a local database
 ```
 
 `mise run testenv` creates or reuses `kbomination-demo`, collects `kube-system` into `.data/kbomination-demo.duckdb`, and runs the local UI in the foreground. Stop it with Ctrl-C; the cluster and database remain for the next run. Override the cluster or database with `KIND_CLUSTER_NAME` and `KBOMINATION_DB`.
+
+`mise run sample-db` creates `.data/kbomination-sample.duckdb` from the checked-in sample KBOMs without contacting a Kubernetes cluster. The import is repeatable; set `KBOMINATION_SAMPLE_DB` to choose a different database path. Start the UI against it with `go run ./cmd/kbomination serve --db .data/kbomination-sample.duckdb`.
 
 For API details, see [docs/openapi.yaml](docs/openapi.yaml).

@@ -1,0 +1,40 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "serialNumber": "urn:uuid:22dcf380-d441-4ec4-93d7-cd22c670fe55",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-01-15T12:00:00Z",
+    "component": { "type": "platform", "name": "sample-north" }
+  },
+  "components": [
+    {
+      "bom-ref": "north-apiserver",
+      "type": "application",
+      "name": "kube-apiserver",
+      "version": "v1.34.0",
+      "purl": "pkg:k8s/kube-apiserver@v1.34.0",
+      "properties": [{ "name": "aquasecurity:trivy:Class", "value": "control-plane" }]
+    },
+    {
+      "bom-ref": "north-coredns",
+      "type": "container",
+      "name": "registry.k8s.io/coredns/coredns",
+      "version": "1.11.3",
+      "purl": "pkg:oci/coredns@1.11.3?repository_url=registry.k8s.io%2Fcoredns%2Fcoredns"
+    },
+    {
+      "bom-ref": "north-kubelet",
+      "type": "application",
+      "name": "kubelet",
+      "version": "v1.34.0",
+      "purl": "pkg:k8s/kubelet@v1.34.0",
+      "properties": [{ "name": "aquasecurity:trivy:Class", "value": "node" }]
+    }
+  ],
+  "dependencies": [
+    { "ref": "north-apiserver", "dependsOn": ["north-kubelet"] },
+    { "ref": "north-coredns", "dependsOn": [] },
+    { "ref": "north-kubelet", "dependsOn": [] }
+  ]
+}

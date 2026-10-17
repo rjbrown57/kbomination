@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "cluster": {
+        "name": "sample-north",
+        "source": "sample-kubeconfig",
+        "server": "https://api.sample-north.invalid"
+      },
+      "collected_at": "2026-01-15T12:00:00Z",
+      "trivy_version": "0.76.0",
+      "file": "sample-north.cdx.json",
+      "status": "succeeded"
+    },
+    {
+      "cluster": {
+        "name": "sample-south",
+        "source": "sample-kubeconfig",
+        "server": "https://api.sample-south.invalid"
+      },
+      "collected_at": "2026-01-15T12:05:00Z",
+      "trivy_version": "0.76.0",
+      "file": "sample-south.cdx.json",
+      "status": "succeeded"
+    }
+  ]
+}
