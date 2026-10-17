@@ -7,7 +7,7 @@ import './style.css';
 type Page = 'Overview' | 'Clusters' | 'Components' | 'Collections' | 'SQL workspace' | 'Settings';
 function useData<T>(path: string, refresh = 0, poll = false) {
   const [data, setData] = useState<T>(); const [error, setError] = useState('');
-  useEffect(() => { let live = true; setData(undefined); setError(''); const load = () => api<T>(path).then(v => { if (live) { setData(v); setError(''); } }).catch(e => { if (live) setError(e.message); }); void load(); const timer = poll ? window.setInterval(load, 3000) : undefined; return () => { live = false; window.clearInterval(timer); }; }, [path, refresh, poll]);
+  useEffect(() => { let live = true; setData(undefined); setError(''); if (!path) return () => { live = false; }; const load = () => api<T>(path).then(v => { if (live) { setData(v); setError(''); } }).catch(e => { if (live) setError(e.message); }); void load(); const timer = poll ? window.setInterval(load, 3000) : undefined; return () => { live = false; window.clearInterval(timer); }; }, [path, refresh, poll]);
   return { data, error };
 }
 function ErrorBox({ text }: { text: string }) { return text ? <div className="error" role="alert">{text}</div> : null; }
@@ -41,7 +41,7 @@ function Inventory({clusterId,onOpenCluster,onClearCluster,onOpenComponent}: {cl
   const cluster=records(clusters.data).find(c=>String(c.id)===clusterId);
   const snapshots=useData<Result>(clusterId?`snapshots?limit=1000&cluster_id=${encodeURIComponent(clusterId)}`:'snapshots');
   const params=new URLSearchParams({...filters,cluster_id:clusterId??'',limit:'100',offset:String(offset)});
-  const inventory=useData<Result>(clusterId?`components?${params}`:'health');
+  const inventory=useData<Result>(clusterId?`components?${params}`:'');
   const detail=useData<{component:Result;properties:Result;dependencies:Result}>(selected?`components/${encodeURIComponent(String(selected.snapshot_id))}/${encodeURIComponent(String(selected.ref))}`:'health');
   const filter=(key:keyof typeof filters,value:string)=>{setFilters(f=>({...f,[key]:value,...(key==='scope'?{snapshot_id:''}:{})}));setOffset(0)};
   if(!clusterId) return <><div className="section-heading"><div><h2>Clusters</h2><p>Select a cluster to inspect its components and inventory history.</p></div><span className="badge">{records(clusters.data).length} clusters</span></div><ErrorBox text={clusters.error}/><section className="panel"><Table data={clusters.data} columns={['name','server','last_collected_at','snapshots']} onRow={row=>onOpenCluster(String(row.id))}/></section></>;
