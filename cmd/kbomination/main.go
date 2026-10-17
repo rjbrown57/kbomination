@@ -64,6 +64,7 @@ func root() *cobra.Command {
 		if err != nil {
 			return err
 		}
+		fmt.Fprintf(cmd.ErrOrStderr(), "Found %d matching cluster(s); collecting up to 2 at a time.\n", len(clusters))
 		if remote != "" && !ingest {
 			return fmt.Errorf("--server requires --ingest")
 		}
@@ -82,6 +83,8 @@ func root() *cobra.Command {
 		}
 		manifest := model.Manifest{Version: 1, Entries: make([]model.ManifestEntry, len(clusters))}
 		var wg sync.WaitGroup
+		var logMu sync.Mutex
+		started := 0
 		sem := make(chan struct{}, 2)
 		for i, c := range clusters {
 			wg.Add(1)
@@ -89,6 +92,11 @@ func root() *cobra.Command {
 				defer wg.Done()
 				sem <- struct{}{}
 				defer func() { <-sem }()
+				logMu.Lock()
+				started++
+				progress := started
+				fmt.Fprintf(cmd.ErrOrStderr(), "[%d/%d] Collecting %s...\n", progress, len(clusters), c.Name)
+				logMu.Unlock()
 				a, e := (collect.Trivy{}).Collect(cmd.Context(), cp, c)
 				entry := model.ManifestEntry{Artifact: a, Status: "succeeded"}
 				if e == nil {
@@ -108,6 +116,15 @@ func root() *cobra.Command {
 					entry.Error = e.Error()
 				}
 				manifest.Entries[i] = entry
+				logMu.Lock()
+				if e != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "[%d/%d] Failed %s: %v\n", progress, len(clusters), c.Name, e)
+				} else if ingest {
+					fmt.Fprintf(cmd.ErrOrStderr(), "[%d/%d] Collected and imported %s.\n", progress, len(clusters), c.Name)
+				} else {
+					fmt.Fprintf(cmd.ErrOrStderr(), "[%d/%d] Collected %s.\n", progress, len(clusters), c.Name)
+				}
+				logMu.Unlock()
 			}(i, c)
 		}
 		wg.Wait()
