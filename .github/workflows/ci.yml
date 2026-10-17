@@ -32,10 +32,10 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      - name: Install ARM64 C compiler
+      - name: Install ARM64 C/C++ cross-compilers
         run: |
           sudo apt-get update
-          sudo apt-get install --yes gcc-aarch64-linux-gnu
+          sudo apt-get install --yes gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
       - name: Run Go and web tests
         run: |
