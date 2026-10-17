@@ -194,14 +194,10 @@ func root() *cobra.Command {
 	imp.Flags().StringVar(&importServer, "server", "", "Use the running local server for ingestion")
 	root.AddCommand(imp)
 	var listen string
+	var allowNonLoopback bool
 	serve := &cobra.Command{Use: "serve", Short: "Serve the frontend, API, and scheduler", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
-		host, _, err := net.SplitHostPort(listen)
-		if err != nil {
+		if err := validateListen(listen, allowNonLoopback); err != nil {
 			return err
-		}
-		ip := net.ParseIP(host)
-		if ip == nil || !ip.IsLoopback() {
-			return fmt.Errorf("--listen must use a loopback IP address")
 		}
 		s, err := store.Open(dbPath)
 		if err != nil {
@@ -239,8 +235,23 @@ func root() *cobra.Command {
 		return nil
 	}}
 	serve.Flags().StringVar(&listen, "listen", "127.0.0.1:8080", "Loopback address to listen on")
+	serve.Flags().BoolVar(&allowNonLoopback, "allow-non-loopback", false, "Allow a non-loopback listening IP (for containers; publish ports only on localhost)")
 	root.AddCommand(serve)
 	return root
+}
+func validateListen(listen string, allowNonLoopback bool) error {
+	host, _, err := net.SplitHostPort(listen)
+	if err != nil {
+		return err
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return fmt.Errorf("--listen must use an IP address")
+	}
+	if !ip.IsLoopback() && !allowNonLoopback {
+		return fmt.Errorf("--listen must use a loopback IP address unless --allow-non-loopback is set")
+	}
+	return nil
 }
 func selectionFlags(cmd *cobra.Command, p *model.Profile) {
 	cmd.Flags().StringVar(&p.Kubeconfig, "kubeconfig", "", "Kubeconfig path (defaults to KUBECONFIG loading rules)")

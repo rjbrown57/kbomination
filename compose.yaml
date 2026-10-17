@@ -1,0 +1,28 @@
+services:
+  kbomination:
+    build: .
+    image: kbomination:local
+    init: true
+    command: ["serve", "--listen", "0.0.0.0:8080", "--allow-non-loopback", "--db", "/data/kbomination.duckdb"]
+    ports:
+      - "127.0.0.1:${KBOMINATION_PORT:-8080}:8080"
+    environment:
+      KUBECONFIG: /kube/config
+    volumes:
+      - type: bind
+        source: ${KBOMINATION_KUBE_DIR:-${HOME}/.kube}
+        target: /kube
+        read_only: true
+        bind:
+          create_host_path: false
+      - kbomination-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    stop_grace_period: 30s
+
+volumes:
+  kbomination-data:

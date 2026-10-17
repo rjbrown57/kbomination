@@ -32,3 +32,27 @@ run = "bash scripts/e2e.sh"
 
 [tasks.testenv]
 run = "bash scripts/testenv.sh"
+
+[tasks."compose:build"]
+description = "Build the local Docker image"
+run = "docker compose build"
+
+[tasks."compose:up"]
+description = "Build and start the local service, waiting until healthy"
+run = "docker compose up --build -d --wait"
+
+[tasks."compose:down"]
+description = "Stop the local service and retain its database volume"
+run = "docker compose down"
+
+[tasks."compose:logs"]
+description = "Follow the local service logs"
+run = "docker compose logs -f"
+
+[tasks."compose:ps"]
+description = "Show local service status"
+run = "docker compose ps"
+
+[tasks."compose:contexts"]
+description = "List kubeconfig contexts from the running container"
+run = "docker compose exec kbomination kbomination contexts"
