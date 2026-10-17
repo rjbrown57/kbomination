@@ -1,0 +1,8 @@
+/bin/
+/.data/
+/kboms/
+*.duckdb
+*.duckdb.wal
+*.duckdb.lock
+/web/node_modules/
+.DS_Store

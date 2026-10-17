@@ -1,0 +1,168 @@
+openapi: 3.1.0
+info:
+  title: kbomination local fleet API
+  version: 1.0.0
+  description: Local-only collection and Kubernetes KBOM inventory API.
+servers:
+  - url: http://127.0.0.1:8080/api/v1
+paths:
+  /health:
+    get:
+      responses:
+        '200':
+          description: Server health
+  /contexts:
+    post:
+      summary: Preview kubeconfig contexts selected by a profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Profile' }
+      responses:
+        '200':
+          description: Matching contexts
+  /profiles:
+    get:
+      responses:
+        '200': { description: Saved profiles }
+    post:
+      summary: Create or update a collection profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Profile' }
+      responses:
+        '200': { description: Saved profile }
+  /profiles/{id}:
+    delete:
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Delete result }
+  /runs:
+    get:
+      responses:
+        '200': { description: Recent runs }
+    post:
+      summary: Start a saved profile asynchronously
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [profile_id]
+              properties: { profile_id: { type: string } }
+      responses:
+        '202':
+          description: Collection accepted
+          content:
+            application/json:
+              schema: { type: object, properties: { id: { type: string } } }
+        '409': { description: Profile already running }
+  /runs/{id}:
+    get:
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Per-cluster run results }
+  /import:
+    post:
+      summary: Ingest a KBOM artifact through the server's writer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Artifact' }
+      responses:
+        '200': { description: Snapshot import result }
+  /clusters:
+    get:
+      responses:
+        '200': { description: Cluster inventory summary }
+  /snapshots:
+    get:
+      parameters:
+        - { in: query, name: cluster_id, schema: { type: string } }
+        - { in: query, name: scope, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 1000, default: 100 } }
+        - { in: query, name: offset, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200': { description: Snapshot history }
+  /snapshots/{id}:
+    get:
+      parameters:
+        - { in: path, name: id, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Snapshot including original CycloneDX JSON }
+  /components:
+    get:
+      parameters:
+        - { in: query, name: cluster_id, schema: { type: string } }
+        - { in: query, name: scope, schema: { type: string } }
+        - { in: query, name: namespace, schema: { type: string } }
+        - { in: query, name: category, schema: { type: string } }
+        - { in: query, name: name, schema: { type: string } }
+        - { in: query, name: version, schema: { type: string } }
+        - { in: query, name: snapshot_id, schema: { type: string } }
+        - { in: query, name: history, schema: { type: boolean } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 1000, default: 100 } }
+        - { in: query, name: offset, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200': { description: Filtered latest or historical components }
+  /components/{snapshot}/{ref}:
+    get:
+      parameters:
+        - { in: path, name: snapshot, required: true, schema: { type: string } }
+        - { in: path, name: ref, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Component properties and dependency relationships }
+  /schema:
+    get:
+      responses:
+        '200': { description: Queryable table and view columns }
+  /query:
+    post:
+      summary: Execute one restricted, read-only query
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sql]
+              properties: { sql: { type: string, maxLength: 65536 } }
+      responses:
+        '200': { description: Columns, rows, truncation flag, and elapsed time }
+        '400': { description: Invalid or disallowed query }
+components:
+  schemas:
+    Profile:
+      type: object
+      required: [name]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kubeconfig: { type: string }
+        context_regex: { type: string, default: '.*' }
+        namespaces: { type: array, items: { type: string } }
+        cron: { type: string, description: Five-field UTC cron expression }
+        enabled: { type: boolean }
+        timeout_seconds: { type: integer, minimum: 1, maximum: 86400, default: 900 }
+    Artifact:
+      type: object
+      required: [cluster, collected_at, kbom]
+      properties:
+        cluster:
+          type: object
+          required: [name, source]
+          properties:
+            name: { type: string }
+            source: { type: string }
+            server: { type: string }
+        namespaces: { type: array, items: { type: string } }
+        collected_at: { type: string, format: date-time }
+        trivy_version: { type: string }
+        kbom: { type: object, description: CycloneDX document }
