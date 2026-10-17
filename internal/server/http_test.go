@@ -34,6 +34,11 @@ func TestLocalOnly(t *testing.T) {
 	}{
 		{"published localhost", "localhost:8080", "", "", 204},
 		{"same origin", "127.0.0.1:8080", "http://127.0.0.1:8080", "same-origin", 204},
+		{"local HTTPS", "kbomination.localhost:8443", "https://kbomination.localhost:8443", "same-origin", 204},
+		{"HTTPS foreign origin", "kbomination.localhost:8443", "https://example.com:8443", "", 403},
+		{"HTTPS different port", "kbomination.localhost:8443", "https://kbomination.localhost", "", 403},
+		{"unapproved local name", "other.localhost:8443", "", "", 403},
+		{"invalid origin scheme", "kbomination.localhost:8443", "ftp://kbomination.localhost:8443", "", 403},
 		{"IPv6", "[::1]:8080", "", "", 204},
 		{"remote host", "example.com:8080", "", "", 403},
 		{"container hostname", "kbomination:8080", "", "", 403},

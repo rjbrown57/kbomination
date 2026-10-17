@@ -385,13 +385,8 @@ func importArtifact(ctx context.Context, s *store.Store, remote string, a model.
 		_, err := s.Import(ctx, a)
 		return err
 	}
-	u, err := url.Parse(remote)
-	if err != nil {
+	if err := validateServerURL(remote); err != nil {
 		return err
-	}
-	ip := net.ParseIP(u.Hostname())
-	if u.Scheme != "http" || (u.Hostname() != "localhost" && (ip == nil || !ip.IsLoopback())) || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return fmt.Errorf("--server must be a local http URL")
 	}
 	data, err := json.Marshal(a)
 	if err != nil {
@@ -411,6 +406,18 @@ func importArtifact(ctx context.Context, s *store.Store, remote string, a model.
 	if resp.StatusCode != 200 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return fmt.Errorf("server import: %s: %s", resp.Status, string(b))
+	}
+	return nil
+}
+
+func validateServerURL(remote string) error {
+	u, err := url.Parse(remote)
+	if err != nil {
+		return err
+	}
+	ip := net.ParseIP(u.Hostname())
+	if (u.Scheme != "http" && u.Scheme != "https") || (u.Hostname() != "localhost" && u.Hostname() != "kbomination.localhost" && (ip == nil || !ip.IsLoopback())) || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("--server must be a local http or https URL")
 	}
 	return nil
 }

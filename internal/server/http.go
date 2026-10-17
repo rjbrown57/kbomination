@@ -384,13 +384,13 @@ func localOnly(next http.Handler) http.Handler {
 			host = h
 		}
 		ip := net.ParseIP(host)
-		if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		if host != "localhost" && host != "kbomination.localhost" && (ip == nil || !ip.IsLoopback()) {
 			sendError(w, 403, fmt.Errorf("local Host required"))
 			return
 		}
 		if origin := r.Header.Get("Origin"); origin != "" {
 			u, err := url.Parse(origin)
-			if err != nil || u.Host != r.Host || u.Scheme != "http" {
+			if err != nil || u.Host != r.Host || (u.Scheme != "http" && u.Scheme != "https") {
 				sendError(w, 403, fmt.Errorf("same-origin request required"))
 				return
 			}

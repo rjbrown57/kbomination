@@ -26,3 +26,30 @@ func TestValidateListen(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateServerURL(t *testing.T) {
+	for _, tc := range []struct {
+		url   string
+		valid bool
+	}{
+		{"http://127.0.0.1:8080", true},
+		{"http://[::1]:8080", true},
+		{"http://localhost:8080", true},
+		{"https://kbomination.localhost:8443", true},
+		{"https://localhost:8443", true},
+		{"https://example.com", false},
+		{"https://other.localhost", false},
+		{"https://kbomination.localhost.example.com", false},
+		{"ftp://localhost", false},
+		{"https://user@kbomination.localhost", false},
+		{"https://kbomination.localhost?x=1", false},
+		{"https://kbomination.localhost#fragment", false},
+		{"https://", false},
+	} {
+		t.Run(tc.url, func(t *testing.T) {
+			if err := validateServerURL(tc.url); (err == nil) != tc.valid {
+				t.Fatalf("validateServerURL(%q) = %v, want valid=%v", tc.url, err, tc.valid)
+			}
+		})
+	}
+}
