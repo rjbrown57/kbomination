@@ -214,6 +214,15 @@ func root() *cobra.Command {
 			return err
 		}
 		defer s.Close()
+		if !cmd.Flags().Changed("log-level") {
+			settings, e := s.Settings(cmd.Context())
+			if e != nil {
+				return e
+			}
+			if e = configureLogger(settings["log_level"]); e != nil {
+				return e
+			}
+		}
 		manager := server.NewManager(s)
 		defer manager.Close()
 		if err = manager.Recover(cmd.Context()); err != nil {
