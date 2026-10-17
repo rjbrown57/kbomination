@@ -58,7 +58,7 @@ docker compose exec kbomination kbomination collect --context-regex '^prod-' \
 A kubeconfig mount does not expose macOS Keychain or another host keyring to Linux containers. Use the host collector with its normal credential plugin and keyring, sending results to the container server:
 
 ```sh
-mise exec -- go run ./cmd/kbomination collect \
+kbomination collect \
   --kubeconfig ~/.kube/config --context-regex '^prod-' \
   --ingest --server http://127.0.0.1:8080
 ```
@@ -114,13 +114,13 @@ Kubernetes access uses the standard kubeconfig loading rules and credential plug
 Preview matching contexts:
 
 ```sh
-mise exec -- go run ./cmd/kbomination contexts --context-regex '^(prod|staging)-'
+kbomination contexts --context-regex '^(prod|staging)-'
 ```
 
 Collect all matching contexts (all namespaces by default):
 
 ```sh
-mise exec -- go run ./cmd/kbomination collect \
+kbomination collect \
   --kubeconfig ~/.kube/config \
   --context-regex '^prod-' \
   --output kboms
@@ -129,7 +129,7 @@ mise exec -- go run ./cmd/kbomination collect \
 Limit collection to namespaces and ingest the results into the default database:
 
 ```sh
-mise exec -- go run ./cmd/kbomination collect \
+kbomination collect \
   --context-regex '^prod-' \
   --namespaces kube-system,platform \
   --ingest
@@ -140,7 +140,7 @@ Each collection writes a timestamped directory containing CycloneDX KBOM files a
 Start the local server:
 
 ```sh
-mise exec -- go run ./cmd/kbomination serve --listen 127.0.0.1:8080
+kbomination serve --listen 127.0.0.1:8080
 ```
 
 Open <http://127.0.0.1:8080>. The database defaults to `.data/kbomination.duckdb`; choose another with `--db`. Use only one process to open the database for writing. While the server is open, send collection results to it with `collect --ingest --server http://127.0.0.1:8080` or `import --manifest … --server http://127.0.0.1:8080`.
@@ -167,7 +167,7 @@ Queries have a 30-second deadline and a 10,000-row result limit. Functions are a
 The optional stdio MCP process calls the running local API and does not open DuckDB itself:
 
 ```sh
-mise exec -- go run ./cmd/kbomination mcp --server http://127.0.0.1:8080
+kbomination mcp --server http://127.0.0.1:8080
 ```
 
 Configure your MCP client to launch this command with its stdin/stdout connected to the process. It exposes read-only cluster, component, snapshot, run, schema, and guarded SQL tools. Keep MCP client access scoped like direct access to the local UI.
