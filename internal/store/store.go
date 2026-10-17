@@ -86,7 +86,14 @@ func (s *Store) Import(ctx context.Context, a model.Artifact) (string, error) {
 		return "", err
 	}
 	a.Namespaces = p.Namespaces
-	a.Cluster.ID = model.Key(a.Cluster.Source, a.Cluster.Name)
+	if a.Cluster.KubeconfigName != "" {
+		a.Cluster.Name = a.Cluster.KubeconfigName
+		a.Cluster.ID = model.Key("kubeconfig-cluster", a.Cluster.KubeconfigName)
+	} else {
+		// Retain compatibility with collection manifests created before stable
+		// kubeconfig cluster names were recorded.
+		a.Cluster.ID = model.Key(a.Cluster.Source, a.Cluster.Name)
+	}
 	if a.CollectedAt.IsZero() {
 		return "", fmt.Errorf("collected_at is required")
 	}
@@ -113,7 +120,7 @@ func (s *Store) Import(ctx context.Context, a model.Artifact) (string, error) {
 	if exists > 0 {
 		return id, nil
 	}
-	_, err = tx.ExecContext(ctx, "INSERT INTO clusters(id,name,source,server) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET server=excluded.server", a.Cluster.ID, a.Cluster.Name, a.Cluster.Source, a.Cluster.Server)
+	_, err = tx.ExecContext(ctx, "INSERT INTO clusters(id,name,source,server) VALUES (?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,source=excluded.source,server=excluded.server", a.Cluster.ID, a.Cluster.Name, a.Cluster.Source, a.Cluster.Server)
 	if err != nil {
 		return "", err
 	}

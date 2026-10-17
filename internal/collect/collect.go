@@ -48,7 +48,14 @@ func Contexts(p model.Profile) ([]model.Cluster, error) {
 		if !ok {
 			return nil, fmt.Errorf("context %q references a missing cluster", name)
 		}
-		clusters = append(clusters, model.Cluster{ID: model.Key(source, name), Name: name, Source: source, Server: cl.Server})
+		clusters = append(clusters, model.Cluster{
+			ID:             model.Key("kubeconfig-cluster", c.Cluster),
+			Name:           c.Cluster,
+			Context:        name,
+			KubeconfigName: c.Cluster,
+			Source:         source,
+			Server:         cl.Server,
+		})
 	}
 	sort.Slice(clusters, func(i, j int) bool { return clusters[i].Name < clusters[j].Name })
 	if len(clusters) == 0 {
@@ -76,7 +83,11 @@ func (Trivy) Collect(ctx context.Context, p model.Profile, c model.Cluster) (mod
 	if len(p.Namespaces) > 0 {
 		args = append(args, "--include-namespaces", strings.Join(p.Namespaces, ","))
 	}
-	args = append(args, "--", c.Name)
+	contextName := c.Context
+	if contextName == "" {
+		contextName = c.Name
+	}
+	args = append(args, "--", contextName)
 	cmd := exec.CommandContext(ctx, "mise", args...)
 	// Use the resolved source for both explicit paths and merged KUBECONFIG sources.
 	cmd.Env = append(os.Environ(), "KUBECONFIG="+c.Source)

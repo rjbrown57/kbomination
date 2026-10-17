@@ -88,10 +88,12 @@ func Key(parts ...string) string {
 }
 
 type Cluster struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Source string `json:"source"`
-	Server string `json:"server"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Context        string `json:"context,omitempty"`
+	KubeconfigName string `json:"kubeconfig_name,omitempty"`
+	Source         string `json:"source"`
+	Server         string `json:"server"`
 }
 
 type Artifact struct {
