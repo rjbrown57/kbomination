@@ -24,6 +24,8 @@ import (
 	"github.com/rjbrown57/kbomination/internal/server"
 	"github.com/rjbrown57/kbomination/internal/store"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 func main() {
@@ -36,8 +38,10 @@ func main() {
 }
 func root() *cobra.Command {
 	var dbPath string
-	root := &cobra.Command{Use: "kbomination", Short: "Collect and explore your Kubernetes fleet's KBOMs", SilenceUsage: true, SilenceErrors: true}
+	var verbosity string
+	root := &cobra.Command{Use: "kbomination", Short: "Collect and explore your Kubernetes fleet's KBOMs", SilenceUsage: true, SilenceErrors: true, PersistentPreRunE: func(cmd *cobra.Command, _ []string) error { return configureLogger(verbosity) }}
 	root.PersistentFlags().StringVar(&dbPath, "db", ".data/kbomination.duckdb", "DuckDB database path")
+	root.PersistentFlags().StringVar(&verbosity, "log-level", "info", "Log verbosity: info, debug, or trace")
 	p := model.Profile{Name: "CLI collection"}
 	contexts := &cobra.Command{Use: "contexts", Short: "List matching kubeconfig contexts", Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error {
 		clusters, err := collect.Contexts(p)
@@ -70,7 +74,8 @@ func root() *cobra.Command {
 			}
 			defer s.Close()
 		}
-		dir := filepath.Join(output, time.Now().UTC().Format("20060102T150405Z")+"-"+uuid.NewString()[:8])
+		runID := time.Now().UTC().Format("20060102T150405Z") + "-" + uuid.NewString()[:8]
+		dir := filepath.Join(output, runID)
 		if err = os.MkdirAll(dir, 0700); err != nil {
 			return err
 		}
@@ -86,8 +91,12 @@ func root() *cobra.Command {
 				a, e := (collect.Trivy{}).Collect(cmd.Context(), cp, c)
 				entry := model.ManifestEntry{Artifact: a, Status: "succeeded"}
 				if e == nil {
-					entry.File = c.ID + ".cdx.json"
-					e = os.WriteFile(filepath.Join(dir, entry.File), a.KBOM, 0600)
+					clusterDir := filepath.Join(dir, safePathSegment(c.Name)+"-"+c.ID)
+					e = os.MkdirAll(clusterDir, 0700)
+					if e == nil {
+						entry.File = filepath.Join(safePathSegment(c.Name)+"-"+c.ID, time.Now().UTC().Format("20060102T150405Z")+"-"+uuid.NewString()[:8]+".cdx.json")
+						e = os.WriteFile(filepath.Join(dir, entry.File), a.KBOM, 0600)
+					}
 				}
 				if e == nil && ingest {
 					e = importArtifact(cmd.Context(), s, remote, a)
@@ -238,6 +247,48 @@ func root() *cobra.Command {
 	serve.Flags().BoolVar(&allowNonLoopback, "allow-non-loopback", false, "Allow a non-loopback listening IP (for containers; publish ports only on localhost)")
 	root.AddCommand(serve)
 	return root
+}
+func configureLogger(level string) error {
+	var l zapcore.Level
+	switch level {
+	case "info":
+		l = zapcore.InfoLevel
+	case "debug":
+		l = zapcore.DebugLevel
+	case "trace":
+		l = zapcore.Level(-2)
+	default:
+		return fmt.Errorf("invalid --log-level %q (expected info, debug, or trace)", level)
+	}
+	config := zap.NewProductionConfig()
+	config.Level = zap.NewAtomicLevelAt(l)
+	config.OutputPaths = []string{"stderr"}
+	config.ErrorOutputPaths = []string{"stderr"}
+	logger, err := config.Build()
+	if err != nil {
+		return err
+	}
+	zap.ReplaceGlobals(logger)
+	return nil
+}
+func safePathSegment(s string) string {
+	s = strings.TrimSpace(s)
+	var b strings.Builder
+	for _, r := range s {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '.' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('-')
+		}
+	}
+	out := strings.Trim(b.String(), ".-_")
+	if out == "" {
+		return "cluster"
+	}
+	if len(out) > 80 {
+		out = out[:80]
+	}
+	return out
 }
 func validateListen(listen string, allowNonLoopback bool) error {
 	host, _, err := net.SplitHostPort(listen)

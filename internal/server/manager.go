@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sync"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/rjbrown57/kbomination/internal/collect"
 	"github.com/rjbrown57/kbomination/internal/model"
 	"github.com/rjbrown57/kbomination/internal/store"
+	"go.uber.org/zap"
 )
 
 var ErrOverlap = errors.New("this profile already has an active collection")
@@ -58,7 +58,7 @@ func (m *Manager) Schedule() {
 				return
 			case now := <-ticker.C:
 				if err := m.Tick(now.UTC()); err != nil {
-					slog.Error("scheduler", "error", err)
+					zap.L().Error("scheduler", zap.Error(err))
 				}
 			}
 		}
@@ -89,7 +89,7 @@ func (m *Manager) Tick(now time.Time) error {
 		if !now.Before(n.next) {
 			m.next[p.ID] = scheduled{fingerprint, schedule.Next(now)}
 			if _, err = m.Start(p); err != nil && !errors.Is(err, ErrOverlap) {
-				slog.Error("scheduled collection failed", "profile", p.ID, "error", err)
+				zap.L().Error("scheduled collection failed", zap.String("profile", p.ID), zap.Error(err))
 			}
 		}
 	}
@@ -172,7 +172,7 @@ func (m *Manager) run(id string, p model.Profile, clusters []model.Cluster) {
 				mu.Unlock()
 			}
 			if e := m.Store.Exec(context.Background(), "UPDATE run_results SET status=?,error=?,snapshot_id=? WHERE run_id=? AND cluster_id=?", status, message, snapshot, id, c.ID); e != nil {
-				slog.Error("persist collection result", "error", e)
+				zap.L().Error("persist collection result", zap.Error(e))
 			}
 		}(c)
 	}
@@ -187,6 +187,6 @@ func (m *Manager) run(id string, p model.Profile, clusters []model.Cluster) {
 		status = "interrupted"
 	}
 	if err := m.Store.Exec(context.Background(), "UPDATE runs SET status=?,finished_at=current_timestamp WHERE id=?", status, id); err != nil {
-		slog.Error("finish run", "error", err)
+		zap.L().Error("finish run", zap.Error(err))
 	}
 }
