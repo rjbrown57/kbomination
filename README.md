@@ -139,7 +139,7 @@ Run kbomination locally behind Caddy with a trusted HTTPS certificate at <https:
 mise run local:up
 ```
 
-This generates certificates in `local/certs`, installs mkcert’s local CA into your host trust store, builds the application, and starts the services. Port 8443 allows this deployment to run alongside Cartographer on port 443. Override it with `KBOMINATION_HTTPS_PORT=9443 mise run local:up` and use that port in browser and CLI URLs.
+This generates certificates in `local/certs`, installs mkcert’s local CA into your host trust store, pulls the published GHCR image, and starts the services. Port 8443 allows this deployment to run alongside Cartographer on port 443. Override it with `KBOMINATION_HTTPS_PORT=9443 mise run local:up` and use that port in browser and CLI URLs.
 
 ### Load data
 
@@ -170,7 +170,7 @@ UI collection profiles use `${HOME}/.kube`, mounted read-only into the container
 mise run local:logs     # Follow service logs
 mise run local:ps       # Show service status
 mise run local:contexts # List contexts available inside the container
-mise run local:build    # Build the application image
+mise run local:pull     # Pull the latest application image from GHCR
 mise run local:certs    # Generate local certificates
 mise run local:down     # Stop services and retain data
 ```

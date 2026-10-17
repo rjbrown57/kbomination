@@ -2,8 +2,8 @@ name: kbomination-local
 
 services:
   kbomination:
-    build: ..
-    image: kbomination:local
+    image: ghcr.io/rjbrown57/kbomination:latest
+    pull_policy: always
     init: true
     command: ["serve", "--listen", "0.0.0.0:8080", "--allow-non-loopback", "--db", "/data/kbomination.duckdb"]
     expose:

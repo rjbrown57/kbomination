@@ -74,10 +74,10 @@ fi
 '''
 
 [tasks."local:up"]
-description = "Build and start kbomination behind local Caddy HTTPS"
+description = "Pull and start kbomination behind local Caddy HTTPS"
 depends = ["local:certs"]
 run = '''
-docker compose -f local/compose.yaml up --build -d --wait
+docker compose -f local/compose.yaml up --pull always -d --wait
 printf 'Web UI: https://kbomination.localhost:%s\n' "${KBOMINATION_HTTPS_PORT:-8443}"
 '''
 
@@ -93,9 +93,9 @@ run = "docker compose -f local/compose.yaml logs -f"
 description = "Show local HTTPS stack status"
 run = "docker compose -f local/compose.yaml ps"
 
-[tasks."local:build"]
-description = "Build the local HTTPS stack application image"
-run = "docker compose -f local/compose.yaml build"
+[tasks."local:pull"]
+description = "Pull the published kbomination image from GHCR"
+run = "docker compose -f local/compose.yaml pull kbomination"
 
 [tasks."local:contexts"]
 description = "List kubeconfig contexts from the local HTTPS stack"

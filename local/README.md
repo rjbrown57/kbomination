@@ -27,4 +27,4 @@ The `kbomination-local` Compose project stores DuckDB in its own named volume. I
 mise run local:down
 ```
 
-Follow logs with `mise run local:logs` and inspect services with `mise run local:ps`. The original HTTP deployment remains available with `docker compose up --build -d --wait` from the repository root.
+Follow logs with `mise run local:logs`, inspect services with `mise run local:ps`, and pull the latest published application image with `mise run local:pull`. The original HTTP deployment remains available with `docker compose up --build -d --wait` from the repository root.
