@@ -10,6 +10,8 @@
 - mise: any processes for fetching tools, building code base, collecting data should utilize mise
 - duckdb: all data is stored in duck db
 - node: a react based frontend that can query the db via a backend provided by the golang binary
+- docker-compose: used for running local instances of kbomination with long lived data sets 
+- helm: a chart for deployment to kubernetes
 
 
 ## Design
@@ -51,7 +53,7 @@ The UI Should have the following views on the left of the page
 - Components : Inspect data by component, linking back to clusters
 - Collections : Configuring recurring collections, show history of the collections
 - SQL Workspace : run queries against the db via sql. Provides meaningful examples for the end-user.
-- Settings : show current settings and allow configuration
+- Settings : show current settings and allow configuration. Contains UI driven import/export functions to allow exporting the entire backend to file, and subsequently moving that to another instance.
 
 ### DB Design
 
