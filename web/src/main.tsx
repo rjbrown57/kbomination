@@ -6,13 +6,14 @@ import './style.css';
 
 type Page = 'Overview' | 'Clusters' | 'Components' | 'Collections' | 'SQL workspace' | 'Settings';
 function useData<T>(path: string, refresh = 0, poll = false) {
-  const [data, setData] = useState<T>(); const [error, setError] = useState('');
-  useEffect(() => { let live = true; setData(undefined); setError(''); if (!path) return () => { live = false; }; const load = () => api<T>(path).then(v => { if (live) { setData(v); setError(''); } }).catch(e => { if (live) setError(e.message); }); void load(); const timer = poll ? window.setInterval(load, 3000) : undefined; return () => { live = false; window.clearInterval(timer); }; }, [path, refresh, poll]);
-  return { data, error };
+  const key = `${path}\0${refresh}\0${poll}`;
+  const [response, setResponse] = useState<{ key: string; value: T }>(); const [failure, setFailure] = useState<{ key: string; message: string }>();
+  useEffect(() => { let live = true; if (!path) return () => { live = false; }; const load = () => api<T>(path).then(value => { if (live) { setResponse({ key, value }); setFailure(undefined); } }).catch(e => { if (live) setFailure({ key, message: e.message }); }); void load(); const timer = poll ? window.setInterval(load, 3000) : undefined; return () => { live = false; window.clearInterval(timer); }; }, [key, path, refresh, poll]);
+  return { data: response?.key === key ? response.value : undefined, error: failure?.key === key ? failure.message : '' };
 }
 function ErrorBox({ text }: { text: string }) { return text ? <div className="error" role="alert">{text}</div> : null; }
 function Table({ data, onRow, columns }: { data?: Result; onRow?: (row: Row) => void; columns?: string[] }) {
-  if (!data) return <div className="empty">Loading…</div>;
+  if (!data || !Array.isArray(data.rows) || !Array.isArray(data.columns)) return <div className="empty">Loading…</div>;
   if (!data.rows.length) return <div className="empty"><strong>No results yet</strong><p>Collect a cluster or adjust your filters to see inventory here.</p></div>;
   const visible = data.columns.filter(c => !columns || columns.includes(c.name));
   return <><div className="table-wrap"><table><thead><tr>{onRow && <th>Inspect</th>}{visible.map(c => <th key={c.name} title={c.type}>{c.name.replaceAll('_', ' ')}</th>)}</tr></thead><tbody>{records(data).map((row, i) => <tr key={i}>{onRow && <td><button className="small secondary" onClick={() => onRow(row)}>View</button></td>}{visible.map(c => <td key={c.name} title={display(row[c.name])}>{c.name === 'status' ? <span className={`badge ${display(row[c.name])}`}>{display(row[c.name])}</span> : display(row[c.name])}</td>)}</tr>)}</tbody></table></div>{data.truncated && <p className="hint">Showing the first 10,000 rows. Narrow your query to see more.</p>}</>;
@@ -42,7 +43,7 @@ function Inventory({clusterId,onOpenCluster,onClearCluster,onOpenComponent}: {cl
   const snapshots=useData<Result>(clusterId?`snapshots?limit=1000&cluster_id=${encodeURIComponent(clusterId)}`:'snapshots');
   const params=new URLSearchParams({...filters,cluster_id:clusterId??'',limit:'100',offset:String(offset)});
   const inventory=useData<Result>(clusterId?`components?${params}`:'');
-  const detail=useData<{component:Result;properties:Result;dependencies:Result}>(selected?`components/${encodeURIComponent(String(selected.snapshot_id))}/${encodeURIComponent(String(selected.ref))}`:'health');
+  const detail=useData<{component:Result;properties:Result;dependencies:Result}>(selected?`components/${encodeURIComponent(String(selected.snapshot_id))}/${encodeURIComponent(String(selected.ref))}`:'');
   const filter=(key:keyof typeof filters,value:string)=>{setFilters(f=>({...f,[key]:value,...(key==='scope'?{snapshot_id:''}:{})}));setOffset(0)};
   if(!clusterId) return <><div className="section-heading"><div><h2>Clusters</h2><p>Select a cluster to inspect its components and inventory history.</p></div><span className="badge">{records(clusters.data).length} clusters</span></div><ErrorBox text={clusters.error}/><section className="panel"><Table data={clusters.data} columns={['name','server','last_collected_at','snapshots']} onRow={row=>onOpenCluster(String(row.id))}/></section></>;
   if(!cluster&&clusters.data) return <><div className="section-heading"><h2>Cluster not found</h2><button className="secondary" onClick={onClearCluster}>Back to clusters</button></div><ErrorBox text="This cluster is no longer in the inventory."/></>;
@@ -65,8 +66,8 @@ function Components({componentId,onOpenCluster}: {componentId?:string;onOpenClus
   const params=new URLSearchParams(Object.fromEntries(Object.entries(filters).filter(([,v])=>v)));
   const catalog = useData<Result>(`catalog?${params}`);
   const [selected, setSelected] = useState<Row>();
-  const detail = useData<Result>(selected ? `catalog/${encodeURIComponent(String(selected.component_id))}` : 'health');
-  const linkedClusters=useData<Result>(selected?`catalog/${encodeURIComponent(String(selected.component_id))}/clusters`:'health');
+  const detail = useData<Result>(selected ? `catalog/${encodeURIComponent(String(selected.component_id))}` : '');
+  const linkedClusters=useData<Result>(selected?`catalog/${encodeURIComponent(String(selected.component_id))}/clusters`:'');
   useEffect(()=>{if(componentId&&catalog.data){const match=records(catalog.data).find(r=>String(r.component_id)===componentId);if(match)setSelected(match)}},[componentId,catalog.data]);
   return <><div className="section-heading"><div><h2>Components across the fleet</h2><p>Package identity groups observations across clusters and versions.</p></div><span className="badge">FLEET CATALOG</span></div><div className="filters"><label>Component<input value={filters.name} onChange={e=>setFilters({...filters,name:e.target.value})} placeholder="Search packages"/></label><label>Cluster<select value={filters.cluster_id} onChange={e=>setFilters({...filters,cluster_id:e.target.value})}><option value="">All clusters</option>{records(clusters.data).map(c=><option key={String(c.id)} value={String(c.id)}>{String(c.name)}</option>)}</select></label><label>Version<input value={filters.version} onChange={e=>setFilters({...filters,version:e.target.value})}/></label><label>Label contains<input value={filters.label} onChange={e=>setFilters({...filters,label:e.target.value})}/></label><button className="secondary" onClick={()=>setFilters({name:'',cluster_id:'',version:'',label:''})}>Reset</button></div><ErrorBox text={catalog.error||clusters.error}/><section className="panel"><Table data={catalog.data} onRow={setSelected}/></section>{selected && <Modal title={display(selected.name)} close={() => setSelected(undefined)}><ErrorBox text={detail.error}/><MetadataEditor kind="component" id={String(selected.component_id??selected.ref)} row={selected}/><dl>{Object.entries(selected).map(([k,v])=><React.Fragment key={k}><dt>{k.replaceAll('_',' ')}</dt><dd>{display(v)}</dd></React.Fragment>)}</dl><h3>Present in clusters</h3><ErrorBox text={linkedClusters.error}/><ul className="context-list">{records(linkedClusters.data).map(c=><li key={String(c.id)}><a href={`#clusters/${encodeURIComponent(String(c.id))}`} onClick={e=>{e.preventDefault();onOpenCluster(String(c.id))}}>{String(c.name)} →</a></li>)}</ul></Modal>}</>;
 }

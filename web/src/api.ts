@@ -7,5 +7,8 @@ export async function api<T>(path: string, body?: unknown, method?: string): Pro
   if (!response.ok) throw new Error(data.error ?? response.statusText);
   return data as T;
 }
-export function records(result?: Result): Row[] { return result?.rows.map(row => Object.fromEntries(result.columns.map((c, i) => [c.name, row[i]]))) ?? []; }
+export function records(result?: Result): Row[] {
+  if (!Array.isArray(result?.rows) || !Array.isArray(result?.columns)) return [];
+  return result.rows.map(row => Object.fromEntries(result.columns.map((c, i) => [c.name, row[i]])));
+}
 export function display(value: unknown): string { return value === null || value === undefined || value === '' ? '—' : typeof value === 'object' ? JSON.stringify(value) : String(value); }
