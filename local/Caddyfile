@@ -1,0 +1,4 @@
+https://kbomination.localhost {
+	tls /etc/caddy/certs/kbomination.localhost.pem /etc/caddy/certs/kbomination.localhost-key.pem
+	reverse_proxy kbomination:8080
+}

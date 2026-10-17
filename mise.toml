@@ -46,30 +46,6 @@ run = "bash scripts/testenv.sh"
 description = "Create a local sample database from checked-in KBOM fixtures"
 run = "bash scripts/sample-db.sh"
 
-[tasks."compose:build"]
-description = "Build the local Docker image"
-run = "docker compose build"
-
-[tasks."compose:up"]
-description = "Build and start the local service, waiting until healthy"
-run = "docker compose up --build -d --wait"
-
-[tasks."compose:down"]
-description = "Stop the local service and retain its database volume"
-run = "docker compose down"
-
-[tasks."compose:logs"]
-description = "Follow the local service logs"
-run = "docker compose logs -f"
-
-[tasks."compose:ps"]
-description = "Show local service status"
-run = "docker compose ps"
-
-[tasks."compose:contexts"]
-description = "List kubeconfig contexts from the running container"
-run = "docker compose exec kbomination kbomination contexts"
-
 [tasks."helm:lint"]
 description = "Lint the Kubernetes deployment chart"
 run = "helm lint chart/kbomination"
@@ -77,3 +53,50 @@ run = "helm lint chart/kbomination"
 [tasks."helm:template"]
 description = "Render the Kubernetes deployment chart"
 run = "helm template kbomination chart/kbomination"
+
+[tasks."local:deps"]
+description = "Check Docker Compose and mkcert for local HTTPS"
+run = '''
+command -v docker >/dev/null 2>&1 || { echo 'Install and start Docker Desktop or Docker Engine with Compose.'; exit 2; }
+docker compose version >/dev/null
+command -v mkcert >/dev/null 2>&1 || { echo 'Install mkcert (macOS: brew install mkcert), then retry.'; exit 2; }
+'''
+
+[tasks."local:certs"]
+description = "Install the local CA and generate trusted HTTPS certificates"
+depends = ["local:deps"]
+run = '''
+mkdir -p local/certs
+mkcert -install
+if [ ! -f local/certs/kbomination.localhost.pem ] || [ ! -f local/certs/kbomination.localhost-key.pem ]; then
+  mkcert -cert-file local/certs/kbomination.localhost.pem -key-file local/certs/kbomination.localhost-key.pem kbomination.localhost localhost 127.0.0.1 ::1
+fi
+'''
+
+[tasks."local:up"]
+description = "Build and start kbomination behind local Caddy HTTPS"
+depends = ["local:certs"]
+run = '''
+docker compose -f local/compose.yaml up --build -d --wait
+printf 'Web UI: https://kbomination.localhost:%s\n' "${KBOMINATION_HTTPS_PORT:-8443}"
+'''
+
+[tasks."local:down"]
+description = "Stop the local HTTPS stack and retain its database"
+run = "docker compose -f local/compose.yaml down"
+
+[tasks."local:logs"]
+description = "Follow local HTTPS stack logs"
+run = "docker compose -f local/compose.yaml logs -f"
+
+[tasks."local:ps"]
+description = "Show local HTTPS stack status"
+run = "docker compose -f local/compose.yaml ps"
+
+[tasks."local:build"]
+description = "Build the local HTTPS stack application image"
+run = "docker compose -f local/compose.yaml build"
+
+[tasks."local:contexts"]
+description = "List kubeconfig contexts from the local HTTPS stack"
+run = "docker compose -f local/compose.yaml exec kbomination kbomination contexts"
