@@ -147,12 +147,18 @@ func (a *API) Handler() http.Handler {
 			sendError(w, 400, fmt.Errorf("explicit confirmation is required"))
 			return
 		}
-		if a.Manager != nil && a.Manager.HasActive() {
-			sendError(w, 409, fmt.Errorf("wait for active collections to finish before restoring"))
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<30)
+		var counts map[string]int
+		var err error
+		if a.Manager != nil {
+			counts, err = a.Manager.Restore(r.Context(), r.Body)
+		} else {
+			counts, err = a.Store.Restore(r.Context(), r.Body)
+		}
+		if errors.Is(err, ErrOverlap) || errors.Is(err, ErrMaintenance) {
+			sendError(w, 409, err)
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<30)
-		counts, err := a.Store.Restore(r.Context(), r.Body)
 		respond(w, map[string]any{"restored": err == nil, "records": counts}, err)
 	})
 	mux.HandleFunc("GET /api/v1/snapshots", func(w http.ResponseWriter, r *http.Request) {

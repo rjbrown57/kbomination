@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -16,23 +17,25 @@ import (
 )
 
 var ErrOverlap = errors.New("this profile already has an active collection")
+var ErrMaintenance = errors.New("collection maintenance is in progress")
 
 type scheduled struct {
 	fingerprint string
 	next        time.Time
 }
 type Manager struct {
-	Store     *store.Store
-	Collector collect.Collector
-	Discover  func(model.Profile) ([]model.Cluster, error)
-	ctx       context.Context
-	cancel    context.CancelFunc
-	mu        sync.Mutex
-	active    map[string]bool
-	next      map[string]scheduled
-	workers   chan struct{}
-	wg        sync.WaitGroup
-	scheduler sync.WaitGroup
+	Store       *store.Store
+	Collector   collect.Collector
+	Discover    func(model.Profile) ([]model.Cluster, error)
+	ctx         context.Context
+	cancel      context.CancelFunc
+	mu          sync.Mutex
+	active      map[string]bool
+	maintenance bool
+	next        map[string]scheduled
+	workers     chan struct{}
+	wg          sync.WaitGroup
+	scheduler   sync.WaitGroup
 }
 
 func NewManager(s *store.Store) *Manager {
@@ -47,6 +50,21 @@ func (m *Manager) Recover(ctx context.Context) error {
 }
 func (m *Manager) Close()          { m.cancel(); m.scheduler.Wait(); m.wg.Wait() }
 func (m *Manager) HasActive() bool { m.mu.Lock(); defer m.mu.Unlock(); return len(m.active) > 0 }
+func (m *Manager) Restore(ctx context.Context, r io.Reader) (map[string]int, error) {
+	m.mu.Lock()
+	if len(m.active) > 0 {
+		m.mu.Unlock()
+		return nil, ErrOverlap
+	}
+	if m.maintenance {
+		m.mu.Unlock()
+		return nil, ErrMaintenance
+	}
+	m.maintenance = true
+	m.mu.Unlock()
+	defer func() { m.mu.Lock(); m.maintenance = false; m.mu.Unlock() }()
+	return m.Store.Restore(ctx, r)
+}
 func (m *Manager) Schedule() {
 	m.scheduler.Add(1)
 	go func() {
@@ -115,6 +133,10 @@ func (m *Manager) Start(p model.Profile) (string, error) {
 	if m.ctx.Err() != nil {
 		m.mu.Unlock()
 		return "", fmt.Errorf("server is stopping")
+	}
+	if m.maintenance {
+		m.mu.Unlock()
+		return "", ErrMaintenance
 	}
 	if m.active[p.ID] {
 		m.mu.Unlock()

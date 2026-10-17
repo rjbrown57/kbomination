@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -33,7 +32,7 @@ type Backup struct {
 }
 
 func (s *Store) Export(ctx context.Context, w io.Writer) error {
-	tx, err := s.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -113,6 +112,8 @@ func (s *Store) Restore(ctx context.Context, r io.Reader) (map[string]int, error
 	if err != nil {
 		return nil, err
 	}
+	s.write.Lock()
+	defer s.write.Unlock()
 	// Save a durable recovery archive before opening the replacement transaction.
 	recovery := s.Path + ".recovery-" + time.Now().UTC().Format("20060102T150405Z") + ".json"
 	if s.Path != "" {
@@ -129,8 +130,6 @@ func (s *Store) Restore(ctx context.Context, r io.Reader) (map[string]int, error
 			return nil, closeErr
 		}
 	}
-	s.write.Lock()
-	defer s.write.Unlock()
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
