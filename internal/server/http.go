@@ -97,7 +97,30 @@ func (a *API) Handler() http.Handler {
 		respond(w, map[string]string{"id": id}, err)
 	})
 	mux.HandleFunc("GET /api/v1/clusters", func(w http.ResponseWriter, r *http.Request) {
-		a.read(w, r, "SELECT c.*, max(s.collected_at) AS last_collected_at, count(DISTINCT s.id) AS snapshots FROM clusters c LEFT JOIN snapshots s ON c.id=s.cluster_id GROUP BY ALL ORDER BY c.name")
+		a.read(w, r, "SELECT c.*, coalesce(m.labels,'{}') labels,coalesce(m.annotations,'{}') annotations,coalesce(m.notes,'') notes,max(s.collected_at) AS last_collected_at, count(DISTINCT s.id) AS snapshots FROM clusters c LEFT JOIN cluster_metadata m ON m.cluster_id=c.id LEFT JOIN snapshots s ON c.id=s.cluster_id GROUP BY ALL ORDER BY c.name")
+	})
+	mux.HandleFunc("GET /api/v1/catalog", func(w http.ResponseWriter, r *http.Request) {
+		a.read(w, r, "SELECT * FROM component_inventory ORDER BY name")
+	})
+	mux.HandleFunc("GET /api/v1/catalog/{id}", func(w http.ResponseWriter, r *http.Request) {
+		a.read(w, r, "SELECT * FROM component_inventory WHERE component_id=?", r.PathValue("id"))
+	})
+	mux.HandleFunc("PUT /api/v1/metadata/{kind}/{id}", func(w http.ResponseWriter, r *http.Request) {
+		var m store.Metadata
+		if !decode(w, r, &m) {
+			return
+		}
+		err := a.Store.SetMetadata(r.Context(), r.PathValue("kind"), r.PathValue("id"), m)
+		respond(w, map[string]bool{"updated": err == nil}, err)
+	})
+	mux.HandleFunc("GET /api/v1/settings", func(w http.ResponseWriter, r *http.Request) { v, e := a.Store.Settings(r.Context()); respond(w, v, e) })
+	mux.HandleFunc("PUT /api/v1/settings", func(w http.ResponseWriter, r *http.Request) {
+		var v map[string]string
+		if !decode(w, r, &v) {
+			return
+		}
+		e := a.Store.SaveSettings(r.Context(), v)
+		respond(w, map[string]bool{"saved": e == nil}, e)
 	})
 	mux.HandleFunc("GET /api/v1/snapshots", func(w http.ResponseWriter, r *http.Request) {
 		q := "SELECT id,cluster_id,scope,collected_at,imported_at,trivy_version,sha256 FROM snapshots WHERE 1=1"

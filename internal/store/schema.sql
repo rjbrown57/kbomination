@@ -9,7 +9,12 @@ CREATE TABLE IF NOT EXISTS snapshots(id VARCHAR PRIMARY KEY, cluster_id VARCHAR 
 CREATE TABLE IF NOT EXISTS components(snapshot_id VARCHAR NOT NULL, ref VARCHAR NOT NULL, parent_ref VARCHAR, type VARCHAR, name VARCHAR, version VARCHAR, purl VARCHAR, hashes VARCHAR, namespace VARCHAR, kind VARCHAR, resource_name VARCHAR, category VARCHAR NOT NULL, PRIMARY KEY(snapshot_id,ref));
 CREATE TABLE IF NOT EXISTS component_properties(snapshot_id VARCHAR NOT NULL, ref VARCHAR NOT NULL, name VARCHAR NOT NULL, value VARCHAR NOT NULL);
 CREATE TABLE IF NOT EXISTS dependencies(snapshot_id VARCHAR NOT NULL, ref VARCHAR NOT NULL, depends_on VARCHAR NOT NULL);
+CREATE TABLE IF NOT EXISTS component_catalog(id VARCHAR PRIMARY KEY, identity VARCHAR NOT NULL UNIQUE, type VARCHAR, name VARCHAR NOT NULL, purl VARCHAR, category VARCHAR NOT NULL, labels VARCHAR NOT NULL DEFAULT '{}', annotations VARCHAR NOT NULL DEFAULT '{}', notes VARCHAR NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS cluster_metadata(cluster_id VARCHAR PRIMARY KEY, labels VARCHAR NOT NULL DEFAULT '{}', annotations VARCHAR NOT NULL DEFAULT '{}', notes VARCHAR NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS component_catalog_observations(snapshot_id VARCHAR NOT NULL, ref VARCHAR NOT NULL, component_id VARCHAR NOT NULL, PRIMARY KEY(snapshot_id,ref));
+CREATE TABLE IF NOT EXISTS app_settings(key VARCHAR PRIMARY KEY, value VARCHAR NOT NULL);
+CREATE VIEW IF NOT EXISTS component_inventory AS SELECT cc.id AS component_id, cc.type, cc.name, cc.purl, cc.category, cc.labels, cc.annotations, cc.notes, array_agg(DISTINCT cl.id) AS cluster_ids, array_agg(DISTINCT cl.name) AS cluster_names, array_agg(DISTINCT c.version) FILTER (WHERE c.version IS NOT NULL) AS versions FROM component_catalog cc JOIN component_catalog_observations co ON co.component_id=cc.id JOIN components c ON c.snapshot_id=co.snapshot_id AND c.ref=co.ref JOIN snapshots s ON s.id=c.snapshot_id JOIN clusters cl ON cl.id=s.cluster_id GROUP BY ALL;
 CREATE VIEW IF NOT EXISTS latest_snapshots AS SELECT * EXCLUDE(rank) FROM (SELECT *, row_number() OVER(PARTITION BY cluster_id,scope ORDER BY collected_at DESC,imported_at DESC,id DESC) AS rank FROM snapshots) WHERE rank=1;
 CREATE VIEW IF NOT EXISTS inventory_history AS SELECT cl.id AS cluster_id, cl.name AS cluster_name, s.scope, s.collected_at, c.* FROM components c JOIN snapshots s ON s.id=c.snapshot_id JOIN clusters cl ON cl.id=s.cluster_id;
 CREATE VIEW IF NOT EXISTS latest_inventory AS SELECT h.* FROM inventory_history h JOIN latest_snapshots s ON s.id=h.snapshot_id;
-INSERT INTO schema_version VALUES (1) ON CONFLICT DO NOTHING;
+INSERT INTO schema_version VALUES (2) ON CONFLICT DO NOTHING;
