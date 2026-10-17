@@ -5,6 +5,7 @@ trivy = "0.76.0"
 kind = "0.30.0"
 kubectl = "1.34.1"
 helm = "3.17.3"
+goreleaser = "2.18.3"
 
 [tasks.setup]
 run = ["go mod download", "npm --prefix web ci"]
@@ -19,8 +20,15 @@ run = "npm --prefix web run dev"
 run = "npm --prefix web run build"
 
 [tasks.build]
-depends = ["build:web"]
-run = "go build -trimpath -o bin/kbomination ./cmd/kbomination"
+run = "KBOMINATION_LOCAL_BUILD=1 goreleaser build --snapshot --single-target --clean --id kbomination-local --output bin/kbomination"
+
+[tasks."release:snapshot"]
+description = "Build the current platform release binary without publishing"
+run = "KBOMINATION_LOCAL_BUILD=1 goreleaser build --snapshot --single-target --clean --id kbomination-local --output bin/kbomination"
+
+[tasks.release]
+description = "Publish release binaries and Docker images for the current tag"
+run = "goreleaser release --clean"
 
 [tasks.test]
 run = ["go test ./...", "npm --prefix web run check"]

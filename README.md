@@ -96,7 +96,7 @@ Open <http://127.0.0.1:8080>. The chart uses a `Recreate` strategy and requires 
 
 ## Host prerequisites
 
-Install [mise](https://mise.jdx.dev/). Go, Node, Trivy, kind, and kubectl are pinned in `mise.toml` and run through mise. On a fresh checkout, trust the local mise configuration and install the pinned tools, then run:
+Install [mise](https://mise.jdx.dev/). Go, Node, Trivy, kind, kubectl, Helm, and GoReleaser are pinned in `mise.toml` and run through mise. On a fresh checkout, trust the local mise configuration and install the pinned tools, then run:
 
 ```sh
 mise trust
@@ -106,6 +106,12 @@ mise run build
 ```
 
 DuckDB uses its supported Go driver and therefore requires the C toolchain available on the host.
+
+## Releases
+
+Push a version tag such as `v1.2.3` to publish Linux amd64 and arm64 binaries on GitHub Releases and matching multi-architecture images to `ghcr.io/rjbrown57/kbomination`. The release workflow builds both from the GoReleaser configuration. The GitHub Actions token needs the repository's default release and package permissions; no extra registry secret is required.
+
+For a local build, `mise run build` uses GoReleaser to build the binary for the current machine into `bin/kbomination`. `mise run release:snapshot` does the same without publishing. Publishing with `mise run release` requires a pushed version tag, Docker Buildx, the ARM64 cross compiler, a Docker login to GHCR, and a `GITHUB_TOKEN` with release and package write access; normal releases should be started by pushing the tag so the GitHub Actions workflow supplies those pieces.
 
 ## Use
 

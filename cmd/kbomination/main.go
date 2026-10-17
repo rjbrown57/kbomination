@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"syscall"
@@ -27,6 +28,11 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+)
+
+var (
+	version = "dev"
+	commit  = "unknown"
 )
 
 func main() {
@@ -246,7 +252,7 @@ func root() *cobra.Command {
 			return err
 		}
 		manager.Schedule()
-		h := (&server.API{Store: s, Manager: manager}).Handler()
+		h := (&server.API{Store: s, Manager: manager, Version: version, Commit: buildCommit()}).Handler()
 		srv := &http.Server{Addr: listen, Handler: h, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 60 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 60 * time.Second}
 		listener, err := net.Listen("tcp", listen)
 		if err != nil {
@@ -278,6 +284,22 @@ func root() *cobra.Command {
 	mcpCmd.Flags().StringVar(&mcpServer, "server", "http://127.0.0.1:8080", "Running local kbomination server URL")
 	root.AddCommand(mcpCmd)
 	return root
+}
+
+func buildCommit() string {
+	if commit != "" && commit != "unknown" {
+		return commit
+	}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+	for _, setting := range info.Settings {
+		if setting.Key == "vcs.revision" {
+			return setting.Value
+		}
+	}
+	return "unknown"
 }
 func configureLogger(level string) error {
 	var l zapcore.Level

@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    # Build CGO binaries against glibc compatible with the Debian Bookworm image.
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.8.0
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install ARM64 C compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes gcc-aarch64-linux-gnu
+
+      - name: Run Go and web tests
+        run: |
+          go test ./...
+          npm --prefix web ci
+          npm --prefix web run check
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install GoReleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          version: v2.18.3
+          install-only: true
+
+      - name: Validate GoReleaser config
+        run: goreleaser check
+
+      - name: Build release artifacts and Docker images
+        run: goreleaser release --snapshot --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

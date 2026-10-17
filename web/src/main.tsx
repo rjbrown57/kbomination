@@ -5,6 +5,13 @@ import './style.css';
 
 
 type Page = 'Overview' | 'Clusters' | 'Components' | 'Collections' | 'SQL workspace' | 'Settings';
+type BuildInfo = { version: string; commit: string };
+function buildLabel(info?: BuildInfo) {
+  const version = info?.version?.trim();
+  if (version && version !== 'dev' && !version.toLowerCase().includes('snapshot')) return `v${version.replace(/^v/, '')}`;
+  const commit = info?.commit?.trim();
+  return commit && commit !== 'unknown' ? commit.slice(0, 7) : 'dev';
+}
 function useData<T>(path: string, refresh = 0, poll = false) {
   const key = `${path}\0${refresh}\0${poll}`;
   const [response, setResponse] = useState<{ key: string; value: T }>(); const [failure, setFailure] = useState<{ key: string; message: string }>();
@@ -101,9 +108,12 @@ function App() {
   const [page, setPage] = useState<Page>('Overview'); const pages: Page[] = ['Overview', 'Clusters', 'Components', 'Collections', 'SQL workspace', 'Settings'];
   const [clusterTargetId,setClusterTargetId]=useState<string>(),[componentTargetId,setComponentTargetId]=useState<string>();
   const settings = useData<SettingsValue>('settings');
+  const build = useData<BuildInfo>('version');
   const openCluster=(id:string)=>{setComponentTargetId(undefined);setClusterTargetId(id);setPage('Clusters')};
   const openComponent=(id:string)=>{setClusterTargetId(undefined);setComponentTargetId(id);setPage('Components')};
   const navigate=(p:Page)=>{setClusterTargetId(undefined);setComponentTargetId(undefined);setPage(p)};
-  return <div className="app"><aside className="sidebar"><a className="brand" href="#" onClick={e => { e.preventDefault(); navigate('Overview'); }}><img className="brand-logo" src="/kbomination-logo.png" alt="kbomination logo"/>kbomination<span className="version">v0.1</span></a><div className="fleet"><span className="dot"/><div><strong>{settings.data?.fleet_name??'Local fleet'}</strong><small>Single-user workspace</small></div></div><nav>{pages.map((p, i) => <button className={page === p ? 'active' : ''} key={p} onClick={() => navigate(p)}><span>{['◫', '▤', '◇', '↻', '⌘', '⚙'][i]}</span>{p}</button>)}</nav></aside><main><header><span>WORKSPACE <b>/</b> {page}</span></header><div className="content">{page === 'Overview' ? <Overview navigate={navigate}/> : page === 'Clusters' ? <Inventory clusterId={clusterTargetId} onOpenCluster={openCluster} onClearCluster={()=>setClusterTargetId(undefined)} onOpenComponent={openComponent}/> : page === 'Components' ? <Components componentId={componentTargetId} onOpenCluster={openCluster}/> : page === 'Collections' ? <Collections/> : page === 'SQL workspace' ? <SQLWorkspace/> : <Settings/>}</div><footer>kbomination <span>Kubernetes fleet intelligence, on your machine.</span></footer></main></div>;
+  const label = buildLabel(build.data);
+  const fullBuild = build.data?.commit && build.data.commit !== 'unknown' ? `${build.data.version || 'development'} · ${build.data.commit}` : build.data?.version || 'Development build';
+  return <div className="app"><aside className="sidebar"><a className="brand" href="#" onClick={e => { e.preventDefault(); navigate('Overview'); }}><img className="brand-logo" src="/kbomination-logo.png" alt="kbomination logo"/>kbomination<span className="version" title={`Build ${fullBuild}`}>{label}</span></a><div className="fleet"><span className="dot"/><div><strong>{settings.data?.fleet_name??'Local fleet'}</strong><small>Single-user workspace</small></div></div><nav>{pages.map((p, i) => <button className={page === p ? 'active' : ''} key={p} onClick={() => navigate(p)}><span>{['◫', '▤', '◇', '↻', '⌘', '⚙'][i]}</span>{p}</button>)}</nav></aside><main><header><span>WORKSPACE <b>/</b> {page}</span></header><div className="content">{page === 'Overview' ? <Overview navigate={navigate}/> : page === 'Clusters' ? <Inventory clusterId={clusterTargetId} onOpenCluster={openCluster} onClearCluster={()=>setClusterTargetId(undefined)} onOpenComponent={openComponent}/> : page === 'Components' ? <Components componentId={componentTargetId} onOpenCluster={openCluster}/> : page === 'Collections' ? <Collections/> : page === 'SQL workspace' ? <SQLWorkspace/> : <Settings/>}</div><footer>kbomination <span>Kubernetes fleet intelligence, on your machine.</span></footer></main></div>;
 }
 createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);

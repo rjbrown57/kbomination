@@ -24,11 +24,16 @@ import (
 type API struct {
 	Store   *store.Store
 	Manager *Manager
+	Version string
+	Commit  string
 }
 
 func (a *API) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/health", func(w http.ResponseWriter, r *http.Request) { send(w, 200, map[string]string{"status": "ok"}) })
+	mux.HandleFunc("GET /api/v1/version", func(w http.ResponseWriter, r *http.Request) {
+		send(w, 200, map[string]string{"version": a.Version, "commit": a.Commit})
+	})
 	mux.HandleFunc("POST /api/v1/contexts", func(w http.ResponseWriter, r *http.Request) {
 		var p model.Profile
 		if !decode(w, r, &p) {

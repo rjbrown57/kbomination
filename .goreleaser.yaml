@@ -1,0 +1,94 @@
+version: 2
+project_name: kbomination
+
+before:
+  hooks:
+    - npm --prefix web run build
+
+builds:
+  - id: kbomination-release
+    main: ./cmd/kbomination
+    binary: kbomination
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }}
+    env:
+      - CGO_ENABLED=1
+      - >-
+        {{- if eq .Os "linux" -}}
+        {{- if eq .Arch "arm64" -}}CC=aarch64-linux-gnu-gcc{{- else -}}CC=gcc{{- end -}}
+        {{- end -}}
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: kbomination-local
+    main: ./cmd/kbomination
+    binary: kbomination
+    ldflags:
+      - -s -w -X main.version={{ .Version }} -X main.commit={{ .Commit }}
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    skip: '{{ ne (index .Env "KBOMINATION_LOCAL_BUILD") "1" }}'
+    flags:
+      - -trimpath
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: kbomination
+    ids:
+      - kbomination-release
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+dockers_v2:
+  - id: kbomination
+    ids:
+      - kbomination-release
+    dockerfile: Dockerfile.release
+    images:
+      - ghcr.io/rjbrown57/kbomination
+    tags:
+      - "{{ .Version }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.title: kbomination
+      org.opencontainers.image.description: Kubernetes Bill of Materials inventory and browser UI
+      org.opencontainers.image.source: "{{ .GitURL }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+      org.opencontainers.image.version: "{{ .Version }}"
+
+release:
+  github:
+    owner: rjbrown57
+    name: kbomination
+  draft: false
+  prerelease: auto

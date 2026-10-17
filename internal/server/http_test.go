@@ -1,10 +1,28 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
+
+func TestVersionEndpoint(t *testing.T) {
+	handler := (&API{Version: "1.2.3", Commit: "abcdef0123456789"}).Handler()
+	req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/version", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+	if res.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusOK)
+	}
+	var got map[string]string
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatal(err)
+	}
+	if got["version"] != "1.2.3" || got["commit"] != "abcdef0123456789" {
+		t.Fatalf("version response = %#v", got)
+	}
+}
 
 func TestLocalOnly(t *testing.T) {
 	handler := localOnly(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
