@@ -8,9 +8,7 @@ Collect Kubernetes Bill of Materials from local kubeconfig contexts, retain each
 
 ## Use
 
-Kubernetes access uses the standard kubeconfig loading rules and credential plugins. Trivy needs list access to the API resources it collects. The selected kubeconfig and credentials stay local. The current kubeconfig context is never changed. Cluster identity is the kubeconfig cluster entry name. Context names select access credentials; matching contexts for the same cluster are collected once, using the first matching context alphabetically. Changing the kubeconfig path or access context does not create another cluster in the database.
-
-Imports use `cluster.name` as the cluster identity regardless of source. Older manifests containing `kubeconfig_name` are normalized on input. If an older manifest uses context aliases as names, set the actual cluster names before importing; `import --manifest … --cluster NAME` can override a single-cluster manifest. Previously stored context-named history is not automatically merged because its real cluster cannot be inferred safely.
+Kubernetes access uses the standard kubeconfig loading rules and credential plugins. Trivy needs list access to the API resources it collects.
 
 Preview matching contexts:
 
@@ -48,6 +46,21 @@ Open <http://127.0.0.1:8080>. The database defaults to `.data/kbomination.duckdb
 
 Create collection profiles in the UI for on-demand runs or schedules. Schedules use five-field cron expressions in UTC and run only while the local server is open. Missed runs are skipped. Collections run at most two clusters at once, default to a 15-minute timeout per cluster, and report partial fleet failures independently. A namespace-limited collection is stored as a separate scope and does not replace the all-namespace view. The server marks interrupted runs after a restart.
 
+### Inventory and queries
+
+The UI offers filters for cluster, snapshot, namespace, category, component, version, and collection scope. It shows only information present in Trivy's KBOM; unavailable resource metadata appears as unknown. Historical snapshots remain available.
+
+The SQL workspace supports a single read-only `SELECT` query against application-owned inventory and history views. For example:
+
+```sql
+SELECT cluster_name, name, version
+FROM latest_inventory
+WHERE contains(lower(name), 'coredns')
+ORDER BY cluster_name, version;
+```
+
+Queries have a 30-second deadline and a 10,000-row result limit. Functions are allowlisted, and external table and file access, extensions, settings changes, and writes are rejected.
+
 ## Run with Docker Compose
 
 For a named local HTTPS endpoint with Caddy and a trusted mkcert certificate:
@@ -76,21 +89,6 @@ KBOMINATION_KUBE_DIR=/absolute/path/to/kube-directory KBOMINATION_PORT=8081 \
 ```
 
 The standalone volume name differs from Compose's project-prefixed volume. Run one server per database volume.
-
-## Inventory and queries
-
-The UI offers filters for cluster, snapshot, namespace, category, component, version, and collection scope. It shows only information present in Trivy's KBOM; unavailable resource metadata appears as unknown. Historical snapshots remain available.
-
-The SQL workspace supports a single read-only `SELECT` query against application-owned inventory and history views. For example:
-
-```sql
-SELECT cluster_name, name, version
-FROM latest_inventory
-WHERE contains(lower(name), 'coredns')
-ORDER BY cluster_name, version;
-```
-
-Queries have a 30-second deadline and a 10,000-row result limit. Functions are allowlisted, and external table and file access, extensions, settings changes, and writes are rejected.
 
 ### MCP client
 
@@ -135,46 +133,4 @@ For API details, see [docs/openapi.yaml](docs/openapi.yaml).
 
 ## Local version
 
-Run kbomination locally behind Caddy with a trusted HTTPS certificate at <https://kbomination.localhost:8443>. Install Docker Engine with Compose (or Docker Desktop) and [mkcert](https://github.com/FiloSottile/mkcert) (`brew install mkcert` on macOS), then run from the repository root:
-
-```sh
-mise run local:up
-```
-
-This generates certificates in `local/certs`, installs mkcert’s local CA into your host trust store, pulls the published GHCR image, and starts the services. Port 8443 allows this deployment to run alongside Cartographer on port 443. Override it with `KBOMINATION_HTTPS_PORT=9443 mise run local:up` and use that port in browser and CLI URLs.
-
-### Load data
-
-Build the current CLI with `mise run build`, then collect using your host kubeconfig and ingest through the running server:
-
-```sh
-./bin/kbomination collect \
-  --context-regex '^kind-' \
-  --ingest \
-  --server https://kbomination.localhost:8443
-```
-
-Adjust the context regex for your clusters. To load an existing collection without collecting again:
-
-```sh
-./bin/kbomination import \
-  --manifest kboms/<collection-directory>/manifest.json \
-  --server https://kbomination.localhost:8443
-```
-
-The server stores data in a persistent Docker volume that survives `local:down`. Send imports through `--server` while it is running so only the server writes to DuckDB. This volume is separate from host `.data` databases and the root HTTP Compose deployment.
-
-UI collection profiles use `${HOME}/.kube`, mounted read-only into the container. Override the source with `KBOMINATION_KUBE_DIR=/absolute/path/to/kube-directory mise run local:up`; credential plugins and external credential files must also be available inside the container. Host CLI collection uses your host’s kubeconfig and credentials.
-
-### Manage the deployment
-
-```sh
-mise run local:logs     # Follow service logs
-mise run local:ps       # Show service status
-mise run local:contexts # List contexts available inside the container
-mise run local:pull     # Pull the latest application image from GHCR
-mise run local:certs    # Generate local certificates
-mise run local:down     # Stop services and retain data
-```
-
-For certificate renewal and additional deployment details, see [local/README.md](local/README.md).
+For detailed instructions on the local HTTPS deployment, loading data, kubeconfig access, and deployment commands, see [docs/local.md](docs/local.md).
