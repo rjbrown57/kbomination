@@ -32,8 +32,23 @@ current-context: dev-b
 	}
 	p := model.Profile{Name: "test", Kubeconfig: path, ContextRegex: "^prod"}
 	cs, err := Contexts(p)
-	if err != nil || len(cs) != 1 || cs[0].Name != "prod-a" {
+	if err != nil || len(cs) != 1 || cs[0].Name != "shared" || cs[0].Context != "prod-a" {
 		t.Fatalf("selection: %+v %v", cs, err)
+	}
+	p.ContextRegex = ".*"
+	targets, err := Clusters(p)
+	if err != nil || len(targets) != 1 || targets[0].Name != "shared" || targets[0].Context != "dev-b" {
+		t.Fatalf("expected one target for shared cluster using the first matching context: %+v %v", targets, err)
+	}
+	otherPath := filepath.Join(t.TempDir(), "renamed-config")
+	if err := os.WriteFile(otherPath, []byte(strings.ReplaceAll(config, "dev-b", "renamed")), 0600); err != nil {
+		t.Fatal(err)
+	}
+	p.Kubeconfig = otherPath
+	p.ContextRegex = "^renamed$"
+	moved, err := Clusters(p)
+	if err != nil || len(moved) != 1 || moved[0].ID != targets[0].ID || moved[0].Context != "renamed" {
+		t.Fatalf("source or context changed cluster identity: %+v %v", moved, err)
 	}
 	for _, re := range []string{"[", "^missing$"} {
 		p.ContextRegex = re
@@ -64,7 +79,7 @@ printf '%s' '{"bomFormat":"CycloneDX","specVersion":"1.6","components":[]}' > "$
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("ARG_LOG", log)
 	p := model.Profile{Name: "test", TimeoutSeconds: 3, Namespaces: []string{"kube-system"}}
-	c := model.Cluster{Name: "context with spaces", Source: "/tmp/config"}
+	c := Target{Cluster: model.Cluster{Name: "shared", Source: "/tmp/config"}, Context: "context with spaces"}
 	a, err := (Trivy{}).Collect(context.Background(), p, c)
 	if err != nil || len(a.KBOM) == 0 {
 		t.Fatal(err)

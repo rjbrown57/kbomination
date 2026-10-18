@@ -26,7 +26,7 @@ type scheduled struct {
 type Manager struct {
 	Store       *store.Store
 	Collector   collect.Collector
-	Discover    func(model.Profile) ([]model.Cluster, error)
+	Discover    func(model.Profile) ([]collect.Target, error)
 	ctx         context.Context
 	cancel      context.CancelFunc
 	mu          sync.Mutex
@@ -40,7 +40,7 @@ type Manager struct {
 
 func NewManager(s *store.Store) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Manager{Store: s, Collector: collect.Trivy{}, Discover: collect.Contexts, ctx: ctx, cancel: cancel, active: map[string]bool{}, next: map[string]scheduled{}, workers: make(chan struct{}, 2)}
+	return &Manager{Store: s, Collector: collect.Trivy{}, Discover: collect.Clusters, ctx: ctx, cancel: cancel, active: map[string]bool{}, next: map[string]scheduled{}, workers: make(chan struct{}, 2)}
 }
 func (m *Manager) Recover(ctx context.Context) error {
 	if err := m.Store.Exec(ctx, "UPDATE run_results SET status='interrupted',error='Server stopped before collection completed' WHERE status IN ('queued','running')"); err != nil {
@@ -166,13 +166,13 @@ func (m *Manager) Start(p model.Profile) (string, error) {
 	go func() { defer release(); m.run(id, p, clusters) }()
 	return id, nil
 }
-func (m *Manager) run(id string, p model.Profile, clusters []model.Cluster) {
+func (m *Manager) run(id string, p model.Profile, clusters []collect.Target) {
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	failures := 0
 	for _, c := range clusters {
 		wg.Add(1)
-		go func(c model.Cluster) {
+		go func(c collect.Target) {
 			defer wg.Done()
 			var err error
 			var snapshot string

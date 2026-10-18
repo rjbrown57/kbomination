@@ -75,8 +75,8 @@ func Open(path string) (*Store, error) {
 func (s *Store) Close() error { return s.DB.Close() }
 
 func (s *Store) Import(ctx context.Context, a model.Artifact) (string, error) {
-	if a.Cluster.Name == "" || a.Cluster.Source == "" {
-		return "", fmt.Errorf("cluster name and kubeconfig source are required")
+	if strings.TrimSpace(a.Cluster.Name) == "" {
+		return "", fmt.Errorf("cluster name is required")
 	}
 	if len(a.KBOM) > model.MaxKBOMBytes {
 		return "", fmt.Errorf("KBOM exceeds 64 MiB limit")
@@ -86,14 +86,7 @@ func (s *Store) Import(ctx context.Context, a model.Artifact) (string, error) {
 		return "", err
 	}
 	a.Namespaces = p.Namespaces
-	if a.Cluster.KubeconfigName != "" {
-		a.Cluster.Name = a.Cluster.KubeconfigName
-		a.Cluster.ID = model.Key("kubeconfig-cluster", a.Cluster.KubeconfigName)
-	} else {
-		// Retain compatibility with collection manifests created before stable
-		// kubeconfig cluster names were recorded.
-		a.Cluster.ID = model.Key(a.Cluster.Source, a.Cluster.Name)
-	}
+	a.Cluster.ID = model.ClusterID(a.Cluster.Name)
 	if a.CollectedAt.IsZero() {
 		return "", fmt.Errorf("collected_at is required")
 	}

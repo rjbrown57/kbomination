@@ -23,6 +23,9 @@ The goal is to allow a fleet owner to visualize and query data about the fleet. 
 ### Statements
 - should allow getting all namespaces, or a selected set
 - clusters are connected to by kubeconfig for extraction of data
+- backend inventory, snapshots, and run results are keyed by the kubeconfig cluster entry name; contexts are access selections only
+- multiple matching contexts referencing one cluster produce one collection per run; the first matching context alphabetically is selected
+- imports use the cluster name independently of kubeconfig path or context; standalone imports identify the cluster with `--cluster`
 - allows filtering by regex which clusters are selected from
 - data can be collected on a schedule or on demand via frontend trigger. The schedule can be configured in the frontend as well
 - the server contains a json api that will expose the data to the frontend. Allow querying by cluster

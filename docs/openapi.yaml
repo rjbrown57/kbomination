@@ -209,10 +209,10 @@ components:
       properties:
         cluster:
           type: object
-          required: [name, source]
+          required: [name]
           properties:
-            name: { type: string }
-            source: { type: string }
+            name: { type: string, description: "Canonical cluster name; identity is independent of access context and source" }
+            source: { type: string, description: "Optional provenance; not part of cluster identity" }
             server: { type: string }
         namespaces: { type: array, items: { type: string } }
         collected_at: { type: string, format: date-time }

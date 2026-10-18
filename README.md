@@ -8,7 +8,9 @@ Collect Kubernetes Bill of Materials from local kubeconfig contexts, retain each
 
 ## Use
 
-Kubernetes access uses the standard kubeconfig loading rules and credential plugins. Trivy needs list access to the API resources it collects. The selected kubeconfig and credentials stay local. The current kubeconfig context is never changed.
+Kubernetes access uses the standard kubeconfig loading rules and credential plugins. Trivy needs list access to the API resources it collects. The selected kubeconfig and credentials stay local. The current kubeconfig context is never changed. Cluster identity is the kubeconfig cluster entry name. Context names select access credentials; matching contexts for the same cluster are collected once, using the first matching context alphabetically. Changing the kubeconfig path or access context does not create another cluster in the database.
+
+Imports use `cluster.name` as the cluster identity regardless of source. Older manifests containing `kubeconfig_name` are normalized on input. If an older manifest uses context aliases as names, set the actual cluster names before importing; `import --manifest … --cluster NAME` can override a single-cluster manifest. Previously stored context-named history is not automatically merged because its real cluster cannot be inferred safely.
 
 Preview matching contexts:
 
@@ -34,7 +36,7 @@ kbomination collect \
   --ingest
 ```
 
-Each collection writes a timestamped directory containing CycloneDX KBOM files and a manifest with the original kubeconfig source, context, timestamp, Trivy version, and collection scope. To import it later, run `kbomination import --manifest <directory>/manifest.json`. A standalone KBOM can be imported with `--source`, `--context`, and `--collected-at`.
+Each collection writes a timestamped directory containing CycloneDX KBOM files and a manifest with the cluster name, collection source, timestamp, Trivy version, and collection scope. To import it later, run `kbomination import --manifest <directory>/manifest.json`. A standalone KBOM can be imported with `--cluster` and `--collected-at` (`--source` optionally records provenance).
 
 Start the local server:
 
@@ -44,7 +46,7 @@ kbomination serve --listen 127.0.0.1:8080
 
 Open <http://127.0.0.1:8080>. The database defaults to `.data/kbomination.duckdb`; choose another with `--db`. Use only one process to open the database for writing. While the server is open, send collection results to it with `collect --ingest --server http://127.0.0.1:8080` or `import --manifest … --server http://127.0.0.1:8080`.
 
-Create collection profiles in the UI for on-demand runs or schedules. Schedules use five-field cron expressions in UTC and run only while the local server is open. Missed runs are skipped. Collections run at most two contexts at once, default to a 15-minute timeout per context, and report partial fleet failures independently. A namespace-limited collection is stored as a separate scope and does not replace the all-namespace view. The server marks interrupted runs after a restart.
+Create collection profiles in the UI for on-demand runs or schedules. Schedules use five-field cron expressions in UTC and run only while the local server is open. Missed runs are skipped. Collections run at most two clusters at once, default to a 15-minute timeout per cluster, and report partial fleet failures independently. A namespace-limited collection is stored as a separate scope and does not replace the all-namespace view. The server marks interrupted runs after a restart.
 
 ## Run with Docker Compose
 

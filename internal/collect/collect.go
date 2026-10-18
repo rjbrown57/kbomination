@@ -15,7 +15,13 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-func Contexts(p model.Profile) ([]model.Cluster, error) {
+// Target pairs a cluster with an access context for this collection only.
+type Target struct {
+	model.Cluster
+	Context string `json:"context"`
+}
+
+func Contexts(p model.Profile) ([]Target, error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
 	}
@@ -39,7 +45,7 @@ func Contexts(p model.Profile) ([]model.Cluster, error) {
 	}
 	source := strings.Join(paths, string(os.PathListSeparator))
 	re := regexp.MustCompile(p.ContextRegex)
-	clusters := []model.Cluster{}
+	clusters := []Target{}
 	for name, c := range cfg.Contexts {
 		if !re.MatchString(name) {
 			continue
@@ -48,29 +54,48 @@ func Contexts(p model.Profile) ([]model.Cluster, error) {
 		if !ok {
 			return nil, fmt.Errorf("context %q references a missing cluster", name)
 		}
-		clusters = append(clusters, model.Cluster{
-			ID:             model.Key("kubeconfig-cluster", c.Cluster),
-			Name:           c.Cluster,
-			Context:        name,
-			KubeconfigName: c.Cluster,
-			Source:         source,
-			Server:         cl.Server,
+		clusters = append(clusters, Target{
+			Cluster: model.Cluster{ID: model.ClusterID(c.Cluster), Name: c.Cluster, Source: source, Server: cl.Server},
+			Context: name,
 		})
 	}
-	sort.Slice(clusters, func(i, j int) bool { return clusters[i].Name < clusters[j].Name })
+	sort.Slice(clusters, func(i, j int) bool {
+		if clusters[i].Name == clusters[j].Name {
+			return clusters[i].Context < clusters[j].Context
+		}
+		return clusters[i].Name < clusters[j].Name
+	})
 	if len(clusters) == 0 {
 		return nil, fmt.Errorf("no kubeconfig contexts match %q", p.ContextRegex)
 	}
 	return clusters, nil
 }
 
+// Clusters selects one target per cluster. If several matching contexts refer
+// to the same cluster, choose the first context alphabetically.
+func Clusters(p model.Profile) ([]Target, error) {
+	targets, err := Contexts(p)
+	if err != nil {
+		return nil, err
+	}
+	unique := make([]Target, 0, len(targets))
+	seen := map[string]bool{}
+	for _, target := range targets {
+		if !seen[target.ID] {
+			unique = append(unique, target)
+			seen[target.ID] = true
+		}
+	}
+	return unique, nil
+}
+
 type Collector interface {
-	Collect(context.Context, model.Profile, model.Cluster) (model.Artifact, error)
+	Collect(context.Context, model.Profile, Target) (model.Artifact, error)
 }
 type Trivy struct{}
 
-func (Trivy) Collect(ctx context.Context, p model.Profile, c model.Cluster) (model.Artifact, error) {
-	a := model.Artifact{Cluster: c, Namespaces: p.Namespaces, CollectedAt: time.Now().UTC(), TrivyVersion: model.TrivyVersion}
+func (Trivy) Collect(ctx context.Context, p model.Profile, c Target) (model.Artifact, error) {
+	a := model.Artifact{Cluster: c.Cluster, Namespaces: p.Namespaces, CollectedAt: time.Now().UTC(), TrivyVersion: model.TrivyVersion}
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(p.TimeoutSeconds)*time.Second)
 	defer cancel()
 	dir, err := os.MkdirTemp("", "kbomination-")
@@ -83,11 +108,10 @@ func (Trivy) Collect(ctx context.Context, p model.Profile, c model.Cluster) (mod
 	if len(p.Namespaces) > 0 {
 		args = append(args, "--include-namespaces", strings.Join(p.Namespaces, ","))
 	}
-	contextName := c.Context
-	if contextName == "" {
-		contextName = c.Name
+	if c.Context == "" {
+		return a, fmt.Errorf("collection target requires an access context")
 	}
-	args = append(args, "--", contextName)
+	args = append(args, "--", c.Context)
 	cmd := exec.CommandContext(ctx, "mise", args...)
 	// Use the resolved source for both explicit paths and merged KUBECONFIG sources.
 	cmd.Env = append(os.Environ(), "KUBECONFIG="+c.Source)

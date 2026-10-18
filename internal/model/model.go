@@ -1,6 +1,7 @@
 package model
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -87,13 +88,38 @@ func Key(parts ...string) string {
 	return hex.EncodeToString(sum[:16])
 }
 
+// Cluster is an inventory identity. Source is provenance only; access contexts
+// belong to collection targets, never to cluster identity.
 type Cluster struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	Context        string `json:"context,omitempty"`
-	KubeconfigName string `json:"kubeconfig_name,omitempty"`
-	Source         string `json:"source"`
-	Server         string `json:"server"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Source string `json:"source"`
+	Server string `json:"server"`
+}
+
+func ClusterID(name string) string { return Key("kubeconfig-cluster", name) }
+
+// UnmarshalJSON accepts older collection artifacts at the input boundary.
+// Their access context is discarded and an explicit kubeconfig cluster name,
+// when present, takes precedence over the old display name.
+func (c *Cluster) UnmarshalJSON(data []byte) error {
+	type plain Cluster
+	var value plain
+	input := struct {
+		*plain
+		Context        string `json:"context"`
+		KubeconfigName string `json:"kubeconfig_name"`
+	}{plain: &value}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&input); err != nil {
+		return err
+	}
+	if input.KubeconfigName != "" {
+		value.Name = input.KubeconfigName
+	}
+	*c = Cluster(value)
+	return nil
 }
 
 type Artifact struct {

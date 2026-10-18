@@ -113,3 +113,59 @@ func TestReopenAndProfiles(t *testing.T) {
 		t.Fatalf("profiles not retained: %+v %v", ps, err)
 	}
 }
+
+func TestClusterIdentityIgnoresAccessSource(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	first := artifact("1.11", time.Now().UTC())
+	first.Cluster.ID = "caller-provided-context-id"
+	first.Cluster.Source = "/host/config"
+	id, err := s.Import(ctx, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := first
+	second.Cluster.Source = "/container/config"
+	second.Cluster.ID = "different-context-id"
+	again, err := s.Import(ctx, second)
+	if err != nil || again != id {
+		t.Fatalf("same observation must be idempotent across sources: %s %v", again, err)
+	}
+	second.CollectedAt = first.CollectedAt.Add(time.Hour)
+	second.Cluster.Source = ""
+	if _, err := s.Import(ctx, second); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := s.Read(ctx, "SELECT id,name,(SELECT count(*) FROM snapshots) FROM clusters")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows.Rows) != 1 || rows.Rows[0][0] != model.ClusterID("test") || rows.Rows[0][1] != "test" || fmt.Sprint(rows.Rows[0][2]) != "2" {
+		t.Fatalf("expected one named cluster and two snapshots: %+v", rows.Rows)
+	}
+}
+
+func TestLegacyArtifactContextIsOnlyAnInputAlias(t *testing.T) {
+	s := testStore(t)
+	a := artifact("1.11", time.Now().UTC())
+	if err := json.Unmarshal([]byte(`{"name":"old-context","context":"old-context","kubeconfig_name":"real-cluster","source":"old-source"}`), &a.Cluster); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Import(context.Background(), a); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(a.Cluster)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "context") || strings.Contains(string(raw), "kubeconfig_name") {
+		t.Fatalf("access aliases leaked into cluster model: %s", raw)
+	}
+	rows, err := s.Read(context.Background(), "SELECT id,name FROM clusters")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows.Rows) != 1 || rows.Rows[0][0] != model.ClusterID("real-cluster") || rows.Rows[0][1] != "real-cluster" {
+		t.Fatalf("legacy artifact used context identity: %+v", rows.Rows)
+	}
+}

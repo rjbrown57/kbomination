@@ -66,7 +66,7 @@ func root() *cobra.Command {
 		if err := cp.Validate(); err != nil {
 			return err
 		}
-		clusters, err := collect.Contexts(cp)
+		clusters, err := collect.Clusters(cp)
 		if err != nil {
 			return err
 		}
@@ -94,7 +94,7 @@ func root() *cobra.Command {
 		sem := make(chan struct{}, 2)
 		for i, c := range clusters {
 			wg.Add(1)
-			go func(i int, c model.Cluster) {
+			go func(i int, c collect.Target) {
 				defer wg.Done()
 				sem <- struct{}{}
 				defer func() { <-sem }()
@@ -171,6 +171,17 @@ func root() *cobra.Command {
 			if m.Version != 1 {
 				return fmt.Errorf("unsupported manifest version %d", m.Version)
 			}
+			if clusterName != "" {
+				names := map[string]bool{}
+				for _, entry := range m.Entries {
+					if entry.File != "" {
+						names[entry.Cluster.Name] = true
+					}
+				}
+				if len(names) > 1 {
+					return fmt.Errorf("--cluster override requires a manifest for a single cluster")
+				}
+			}
 			for _, entry := range m.Entries {
 				if entry.File == "" {
 					continue
@@ -182,11 +193,14 @@ func root() *cobra.Command {
 				if err != nil {
 					return err
 				}
+				if clusterName != "" {
+					entry.Cluster.Name = clusterName
+				}
 				artifacts = append(artifacts, entry.Artifact)
 			}
 		} else {
-			if source == "" || clusterName == "" || collected == "" {
-				return fmt.Errorf("standalone import requires --source, --context and --collected-at (RFC3339)")
+			if clusterName == "" || collected == "" {
+				return fmt.Errorf("standalone import requires --cluster and --collected-at (RFC3339)")
 			}
 			at, err := time.Parse(time.RFC3339Nano, collected)
 			if err != nil {
@@ -219,8 +233,8 @@ func root() *cobra.Command {
 		return nil
 	}}
 	imp.Flags().StringVar(&manifestPath, "manifest", "", "Collection manifest path")
-	imp.Flags().StringVar(&source, "source", "", "Original kubeconfig source identity")
-	imp.Flags().StringVar(&clusterName, "context", "", "Original context name")
+	imp.Flags().StringVar(&source, "source", "", "Optional collection source for provenance")
+	imp.Flags().StringVar(&clusterName, "cluster", "", "Kubeconfig cluster name")
 	imp.Flags().StringVar(&collected, "collected-at", "", "Collection timestamp (RFC3339)")
 	imp.Flags().StringVar(&version, "trivy-version", "unknown", "Trivy version that generated the KBOM")
 	imp.Flags().StringSliceVar(&namespaces, "namespaces", nil, "Selected namespaces; omitted means all")
