@@ -1,11 +1,108 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/rjbrown57/kbomination/internal/model"
+	"github.com/rjbrown57/kbomination/internal/store"
 )
+
+func TestCatalogNameGroups(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "catalog.duckdb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	components := []map[string]string{}
+	for i := range 105 {
+		version := "1.0"
+		if i == 0 {
+			version = "2.0"
+		}
+		components = append(components, map[string]string{"bom-ref": fmt.Sprint(i), "name": "dns", "type": "application", "version": version, "purl": fmt.Sprintf("pkg:generic/vendor%d/dns@%s", i, version)})
+	}
+	components = append(components, map[string]string{"bom-ref": "other", "name": "dns-tools", "type": "application"})
+	raw, err := json.Marshal(map[string]any{"bomFormat": "CycloneDX", "specVersion": "1.6", "components": components})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Repeated observations in different clusters must not inflate identity counts.
+	for _, cluster := range []string{"north", "south"} {
+		if _, err := s.Import(context.Background(), model.Artifact{Cluster: model.Cluster{Name: cluster}, CollectedAt: time.Now().UTC(), KBOM: raw}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Exec(context.Background(), "UPDATE component_catalog SET labels=? WHERE purl=?", `{"team":"platform"}`, "pkg:generic/vendor0/dns@2.0"); err != nil {
+		t.Fatal(err)
+	}
+	handler := (&API{Store: s}).Handler()
+	get := func(path string) []map[string]any {
+		t.Helper()
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/v1/"+path, nil))
+		if res.Code != http.StatusOK {
+			t.Fatalf("%s: status %d: %s", path, res.Code, res.Body.String())
+		}
+		var result store.Result
+		if err := json.Unmarshal(res.Body.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		rows := []map[string]any{}
+		for _, values := range result.Rows {
+			row := map[string]any{}
+			for i, column := range result.Columns {
+				row[column.Name] = values[i]
+			}
+			rows = append(rows, row)
+		}
+		return rows
+	}
+	for _, tc := range []struct {
+		query, name  string
+		count, total int
+	}{
+		{"group_by=name&limit=1", "dns", 105, 2},
+		{"group_by=name&limit=1&offset=1", "dns-tools", 1, 2},
+		{"group_by=name&name=DNS&version=2.0", "dns", 1, 1},
+		{"group_by=name&label=platform", "dns", 1, 1},
+		{"group_by=name&cluster_id=" + model.ClusterID("north") + "&exact_name=dns", "dns", 105, 1},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			rows := get("catalog?" + tc.query)
+			if len(rows) != 1 || rows[0]["name"] != tc.name || rows[0]["component_count"] != float64(tc.count) || rows[0]["total_count"] != float64(tc.total) {
+				t.Fatalf("unexpected groups: %+v", rows)
+			}
+		})
+	}
+	rows := get("catalog?exact_name=dns&limit=100&offset=100")
+	if len(rows) != 5 {
+		t.Fatalf("expected remaining 5 identities, got %d", len(rows))
+	}
+	for _, row := range rows {
+		if row["name"] != "dns" || row["total_count"] != float64(105) {
+			t.Fatalf("unexpected identity: %+v", row)
+		}
+	}
+	id := rows[0]["component_id"].(string)
+	if detail := get("catalog/" + id); len(detail) != 1 || detail[0]["component_id"] != id {
+		t.Fatalf("direct detail lookup: %+v", detail)
+	}
+	if clusters := get("catalog/" + id + "/clusters"); len(clusters) != 2 {
+		t.Fatalf("linked clusters: %+v", clusters)
+	}
+	for _, query := range []string{"group_by=name&name=missing", "exact_name=dns&offset=105", "group_by=name&cluster_id=missing"} {
+		if rows := get("catalog?" + query); len(rows) != 0 {
+			t.Fatalf("%s: expected no matches, got %+v", query, rows)
+		}
+	}
+}
 
 func TestVersionEndpoint(t *testing.T) {
 	handler := (&API{Version: "1.2.3", Commit: "abcdef0123456789"}).Handler()

@@ -53,7 +53,7 @@ The UI Should have the following views on the left of the page. All pages show t
 
 - Overview : High level view of clusters and components preset in the data set.
 - Clusters : Inspect data by cluster. This should provide a visual overview of the observed cluster and components, and provide a way to click into details about components.
-- Components : Inspect data by component, linking back to clusters
+- Components : Inspect data by component, linking back to clusters. Components with the same name are collapsed and a count is displayed to keep the UI readable.
 - Collections : Configuring recurring collections, show history of the collections
 - SQL Workspace : run queries against the db via sql. Provides meaningful examples for the end-user.
 - Settings : show current settings and allow configuration. Contains UI driven import/export functions to allow exporting the entire backend to file, and subsequently moving that to another instance.

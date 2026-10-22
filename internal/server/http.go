@@ -298,8 +298,17 @@ func (a *API) components(w http.ResponseWriter, r *http.Request) {
 	a.read(w, r, q, args...)
 }
 func (a *API) catalog(w http.ResponseWriter, r *http.Request) {
+	groupBy := r.URL.Query().Get("group_by")
+	if groupBy != "" && groupBy != "name" {
+		respond(w, nil, fmt.Errorf("invalid group_by: expected name"))
+		return
+	}
 	q := "SELECT * FROM component_inventory WHERE 1=1"
 	args := []any{}
+	if values, ok := r.URL.Query()["exact_name"]; ok {
+		q += " AND name=?"
+		args = append(args, values[0])
+	}
 	if v := r.URL.Query().Get("name"); v != "" {
 		q += " AND contains(lower(name),lower(?))"
 		args = append(args, v)
@@ -321,7 +330,13 @@ func (a *API) catalog(w http.ResponseWriter, r *http.Request) {
 		respond(w, nil, err)
 		return
 	}
-	q += " ORDER BY name,component_id LIMIT ? OFFSET ?"
+	// Group before pagination so the count includes every matching identity,
+	// even when a single name has more entries than the page size.
+	if groupBy == "name" {
+		q = "SELECT name,count(*) AS component_count,count(*) OVER() AS total_count FROM (" + q + ") matches GROUP BY name ORDER BY name LIMIT ? OFFSET ?"
+	} else {
+		q = "SELECT *,count(*) OVER() AS total_count FROM (" + q + ") matches ORDER BY name,component_id LIMIT ? OFFSET ?"
+	}
 	args = append(args, limit, offset)
 	a.read(w, r, q, args...)
 }

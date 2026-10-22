@@ -50,6 +50,8 @@ Create collection profiles in the UI for on-demand runs or schedules. Schedules 
 
 The UI offers filters for cluster, snapshot, namespace, category, component, version, and collection scope. It shows only information present in Trivy's KBOM; unavailable resource metadata appears as unknown. Historical snapshots remain available.
 
+The Components page collapses matching package identities by name and shows a count for each group. Expand a name to browse its identities, inspect details, and follow links to clusters. Counts reflect the active filters across recorded snapshots; both groups and their entries are paginated.
+
 The SQL workspace supports a single read-only `SELECT` query against application-owned inventory and history views. For example:
 
 ```sql

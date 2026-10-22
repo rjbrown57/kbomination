@@ -86,6 +86,8 @@ paths:
     get:
       summary: List fleet-wide package identities and observed versions
       parameters:
+        - { in: query, name: group_by, schema: { type: string, enum: [name] }, description: Group matching package identities by exact name before pagination. Returns name and component_count per group. }
+        - { in: query, name: exact_name, schema: { type: string }, description: Case-sensitive exact name filter for expanding a group. }
         - { in: query, name: name, schema: { type: string } }
         - { in: query, name: cluster_id, schema: { type: string } }
         - { in: query, name: version, schema: { type: string } }
@@ -93,7 +95,7 @@ paths:
         - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 1000, default: 100 } }
         - { in: query, name: offset, schema: { type: integer, minimum: 0, default: 0 } }
       responses:
-        '200': { description: Component catalog with cluster membership and metadata }
+        '200': { description: Component identities or name groups. Each row includes total_count for matching identities or groups before pagination. Counts cover recorded snapshots and respect the supplied filters. }
   /catalog/{id}:
     get:
       parameters:
