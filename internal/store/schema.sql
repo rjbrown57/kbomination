@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS clusters(id VARCHAR PRIMARY KEY, fleet_id VARCHAR NOT
 CREATE TABLE IF NOT EXISTS profiles(id VARCHAR PRIMARY KEY, body VARCHAR NOT NULL);
 CREATE TABLE IF NOT EXISTS runs(id VARCHAR PRIMARY KEY, profile_id VARCHAR NOT NULL, profile_name VARCHAR NOT NULL, started_at TIMESTAMPTZ NOT NULL, finished_at TIMESTAMPTZ, status VARCHAR NOT NULL);
 CREATE TABLE IF NOT EXISTS run_results(run_id VARCHAR NOT NULL, cluster_id VARCHAR NOT NULL, cluster_name VARCHAR NOT NULL, status VARCHAR NOT NULL, error VARCHAR NOT NULL DEFAULT '', snapshot_id VARCHAR, PRIMARY KEY(run_id,cluster_id));
-CREATE TABLE IF NOT EXISTS snapshots(id VARCHAR PRIMARY KEY, cluster_id VARCHAR NOT NULL, scope VARCHAR NOT NULL, collected_at TIMESTAMPTZ NOT NULL, imported_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp, trivy_version VARCHAR NOT NULL, sha256 VARCHAR NOT NULL, raw_json VARCHAR NOT NULL);
+CREATE TABLE IF NOT EXISTS snapshots(id VARCHAR PRIMARY KEY, cluster_id VARCHAR NOT NULL, scope VARCHAR NOT NULL, collected_at TIMESTAMPTZ NOT NULL, imported_at TIMESTAMPTZ NOT NULL DEFAULT current_timestamp, trivy_version VARCHAR NOT NULL, sha256 VARCHAR NOT NULL, raw_json VARCHAR NOT NULL, collection_options VARCHAR, coverage_description VARCHAR, namespaces VARCHAR);
 CREATE TABLE IF NOT EXISTS components(snapshot_id VARCHAR NOT NULL, ref VARCHAR NOT NULL, parent_ref VARCHAR, type VARCHAR, name VARCHAR, version VARCHAR, purl VARCHAR, hashes VARCHAR, namespace VARCHAR, kind VARCHAR, resource_name VARCHAR, category VARCHAR NOT NULL, PRIMARY KEY(snapshot_id,ref));
 CREATE TABLE IF NOT EXISTS component_properties(snapshot_id VARCHAR NOT NULL, ref VARCHAR NOT NULL, name VARCHAR NOT NULL, value VARCHAR NOT NULL);
 CREATE TABLE IF NOT EXISTS dependencies(snapshot_id VARCHAR NOT NULL, ref VARCHAR NOT NULL, depends_on VARCHAR NOT NULL);
@@ -17,4 +17,4 @@ CREATE VIEW IF NOT EXISTS component_inventory AS SELECT cc.id AS component_id, c
 CREATE VIEW IF NOT EXISTS latest_snapshots AS SELECT * EXCLUDE(rank) FROM (SELECT *, row_number() OVER(PARTITION BY cluster_id,scope ORDER BY collected_at DESC,imported_at DESC,id DESC) AS rank FROM snapshots) WHERE rank=1;
 CREATE VIEW IF NOT EXISTS inventory_history AS SELECT cl.id AS cluster_id, cl.name AS cluster_name, s.scope, s.collected_at, c.* FROM components c JOIN snapshots s ON s.id=c.snapshot_id JOIN clusters cl ON cl.id=s.cluster_id;
 CREATE VIEW IF NOT EXISTS latest_inventory AS SELECT h.* FROM inventory_history h JOIN latest_snapshots s ON s.id=h.snapshot_id;
-INSERT INTO schema_version VALUES (2) ON CONFLICT DO NOTHING;
+INSERT INTO schema_version VALUES (3) ON CONFLICT DO NOTHING;

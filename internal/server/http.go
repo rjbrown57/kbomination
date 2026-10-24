@@ -196,8 +196,11 @@ func (a *API) Handler() http.Handler {
 		}
 		respond(w, map[string]any{"restored": err == nil, "records": counts}, err)
 	})
+	mux.HandleFunc("GET /api/v1/scopes", func(w http.ResponseWriter, r *http.Request) {
+		a.read(w, r, "SELECT scope,coalesce(coverage_description,scope || ' · collection settings unrecorded') AS coverage_description FROM latest_snapshots WHERE cluster_id=? ORDER BY scope", r.URL.Query().Get("cluster_id"))
+	})
 	mux.HandleFunc("GET /api/v1/snapshots", func(w http.ResponseWriter, r *http.Request) {
-		q := "SELECT id,cluster_id,scope,collected_at,imported_at,trivy_version,sha256 FROM snapshots WHERE 1=1"
+		q := "SELECT id,cluster_id,scope,collected_at,imported_at,trivy_version,sha256,namespaces,collection_options,coalesce(coverage_description,scope || ' · collection settings unrecorded') AS coverage_description FROM snapshots WHERE 1=1"
 		args := []any{}
 		for _, key := range []string{"cluster_id", "scope"} {
 			if v := r.URL.Query().Get(key); v != "" {
@@ -215,7 +218,7 @@ func (a *API) Handler() http.Handler {
 		a.read(w, r, q, args...)
 	})
 	mux.HandleFunc("GET /api/v1/snapshots/{id}", func(w http.ResponseWriter, r *http.Request) {
-		a.read(w, r, "SELECT * FROM snapshots WHERE id=?", r.PathValue("id"))
+		a.read(w, r, "SELECT * EXCLUDE(coverage_description),coalesce(coverage_description,scope || ' · collection settings unrecorded') AS coverage_description FROM snapshots WHERE id=?", r.PathValue("id"))
 	})
 	mux.HandleFunc("GET /api/v1/components", a.components)
 	mux.HandleFunc("GET /api/v1/components/{snapshot}/{ref}", func(w http.ResponseWriter, r *http.Request) {

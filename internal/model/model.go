@@ -18,14 +18,15 @@ const TrivyVersion = "0.76.0"
 const MaxKBOMBytes = 64 << 20
 
 type Profile struct {
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	Kubeconfig     string   `json:"kubeconfig"`
-	ContextRegex   string   `json:"context_regex"`
-	Namespaces     []string `json:"namespaces"`
-	Cron           string   `json:"cron"`
-	Enabled        bool     `json:"enabled"`
-	TimeoutSeconds int      `json:"timeout_seconds"`
+	CollectionOptions CollectionOptions `json:"collection_options"`
+	ID                string            `json:"id"`
+	Name              string            `json:"name"`
+	Kubeconfig        string            `json:"kubeconfig"`
+	ContextRegex      string            `json:"context_regex"`
+	Namespaces        []string          `json:"namespaces"`
+	Cron              string            `json:"cron"`
+	Enabled           bool              `json:"enabled"`
+	TimeoutSeconds    int               `json:"timeout_seconds"`
 }
 
 func (p *Profile) Validate() error {
@@ -44,19 +45,14 @@ func (p *Profile) Validate() error {
 	if p.TimeoutSeconds < 1 || p.TimeoutSeconds > 86400 {
 		return fmt.Errorf("timeout must be between 1 and 86400 seconds")
 	}
-	ns := []string{}
-	for _, n := range p.Namespaces {
-		n = strings.TrimSpace(n)
-		if n == "" {
-			return fmt.Errorf("namespace cannot be empty")
-		}
-		if len(n) > 63 || !regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`).MatchString(n) {
-			return fmt.Errorf("invalid namespace %q", n)
-		}
-		ns = append(ns, n)
+	var err error
+	p.Namespaces, err = NormalizeNamespaces(p.Namespaces)
+	if err != nil {
+		return err
 	}
-	slices.Sort(ns)
-	p.Namespaces = slices.Compact(ns)
+	if err = p.CollectionOptions.Normalize(p.Namespaces); err != nil {
+		return err
+	}
 	if p.Cron != "" {
 		if _, err := ParseSchedule(p.Cron); err != nil {
 			return fmt.Errorf("schedule: %w", err)
@@ -123,11 +119,12 @@ func (c *Cluster) UnmarshalJSON(data []byte) error {
 }
 
 type Artifact struct {
-	Cluster      Cluster         `json:"cluster"`
-	Namespaces   []string        `json:"namespaces"`
-	CollectedAt  time.Time       `json:"collected_at"`
-	TrivyVersion string          `json:"trivy_version"`
-	KBOM         json.RawMessage `json:"kbom"`
+	CollectionOptions *CollectionOptions `json:"collection_options,omitempty"`
+	Cluster           Cluster            `json:"cluster"`
+	Namespaces        []string           `json:"namespaces"`
+	CollectedAt       time.Time          `json:"collected_at"`
+	TrivyVersion      string             `json:"trivy_version"`
+	KBOM              json.RawMessage    `json:"kbom"`
 }
 
 type ManifestEntry struct {

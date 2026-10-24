@@ -87,7 +87,7 @@ func root() *cobra.Command {
 		if err = os.MkdirAll(dir, 0700); err != nil {
 			return err
 		}
-		manifest := model.Manifest{Version: 1, Entries: make([]model.ManifestEntry, len(clusters))}
+		manifest := model.Manifest{Version: 2, Entries: make([]model.ManifestEntry, len(clusters))}
 		var wg sync.WaitGroup
 		var logMu sync.Mutex
 		started := 0
@@ -148,18 +148,29 @@ func root() *cobra.Command {
 		return nil
 	}}
 	selectionFlags(collection, &cp)
+	collectionFlags(collection, &cp.CollectionOptions)
 	collection.Flags().BoolVar(&ingest, "ingest", false, "Also import successful KBOMs into DuckDB")
 	collection.Flags().StringVar(&output, "output", "kboms", "Artifact output directory")
 	collection.Flags().StringVar(&remote, "server", "", "Use the running local server for ingestion")
 	root.AddCommand(collection)
 	var manifestPath, source, clusterName, collected, version, importServer string
 	var namespaces []string
+	importOptions := model.CollectionOptions{}
+	var importCoverage bool
 	imp := &cobra.Command{Use: "import [kbom.json]", Short: "Import a collection manifest or an existing KBOM", Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		if (manifestPath == "") == (len(args) == 0) {
 			return fmt.Errorf("provide exactly one KBOM path or --manifest")
 		}
 		var artifacts []model.Artifact
+		for _, name := range coverageFlagNames {
+			if cmd.Flags().Changed(name) {
+				importCoverage = true
+			}
+		}
 		if manifestPath != "" {
+			if importCoverage {
+				return fmt.Errorf("coverage flags cannot override a manifest; use its recorded collection settings")
+			}
 			raw, err := readLimited(manifestPath)
 			if err != nil {
 				return err
@@ -168,7 +179,7 @@ func root() *cobra.Command {
 			if err = json.Unmarshal(raw, &m); err != nil {
 				return err
 			}
-			if m.Version != 1 {
+			if m.Version != 1 && m.Version != 2 {
 				return fmt.Errorf("unsupported manifest version %d", m.Version)
 			}
 			if clusterName != "" {
@@ -210,7 +221,11 @@ func root() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			artifacts = append(artifacts, model.Artifact{Cluster: model.Cluster{Name: clusterName, Source: source}, Namespaces: namespaces, CollectedAt: at, TrivyVersion: version, KBOM: raw})
+			var options *model.CollectionOptions
+			if importCoverage {
+				options = &importOptions
+			}
+			artifacts = append(artifacts, model.Artifact{Cluster: model.Cluster{Name: clusterName, Source: source}, Namespaces: namespaces, CollectionOptions: options, CollectedAt: at, TrivyVersion: version, KBOM: raw})
 		}
 		if len(artifacts) == 0 {
 			return fmt.Errorf("manifest contains no KBOM files")
@@ -225,10 +240,19 @@ func root() *cobra.Command {
 			defer s.Close()
 		}
 		for _, a := range artifacts {
+			a.Namespaces, err = model.NormalizeNamespaces(a.Namespaces)
+			if err != nil {
+				return err
+			}
+			if a.CollectionOptions != nil {
+				if err = a.CollectionOptions.Normalize(a.Namespaces); err != nil {
+					return err
+				}
+			}
 			if err = importArtifact(cmd.Context(), s, importServer, a); err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Imported", a.Cluster.Name, model.Scope(a.Namespaces))
+			fmt.Fprintln(cmd.OutOrStdout(), "Imported", a.Cluster.Name, model.CollectionScope(a.Namespaces, a.CollectionOptions))
 		}
 		return nil
 	}}
@@ -238,6 +262,7 @@ func root() *cobra.Command {
 	imp.Flags().StringVar(&collected, "collected-at", "", "Collection timestamp (RFC3339)")
 	imp.Flags().StringVar(&version, "trivy-version", "unknown", "Trivy version that generated the KBOM")
 	imp.Flags().StringSliceVar(&namespaces, "namespaces", nil, "Selected namespaces; omitted means all")
+	coverageFlags(imp, &importOptions)
 	imp.Flags().StringVar(&importServer, "server", "", "Use the running local server for ingestion")
 	root.AddCommand(imp)
 	var listen string
@@ -434,4 +459,30 @@ func validateServerURL(remote string) error {
 		return fmt.Errorf("--server must be a local http or https URL")
 	}
 	return nil
+}
+
+var coverageFlagNames = []string{"namespaces", "exclude-namespaces", "include-kinds", "exclude-kinds", "scan-images", "offline-scan"}
+
+func coverageFlags(cmd *cobra.Command, o *model.CollectionOptions) {
+	f := cmd.Flags()
+	f.StringSliceVar(&o.ExcludeNamespaces, "exclude-namespaces", nil, "Namespaces excluded from collection")
+	f.StringSliceVar(&o.IncludeKinds, "include-kinds", nil, "Kubernetes kinds to include, comma-separated")
+	f.StringSliceVar(&o.ExcludeKinds, "exclude-kinds", nil, "Kubernetes kinds to exclude, comma-separated")
+	f.BoolVar(&o.ScanImages, "scan-images", false, "Download and scan container images (increases collection work)")
+	f.BoolVar(&o.OfflineScan, "offline-scan", false, "Disable dependency-identification API requests; Kubernetes access is still required")
+}
+func collectionFlags(cmd *cobra.Command, o *model.CollectionOptions) {
+	coverageFlags(cmd, o)
+	defaults := model.DefaultCollectionOptions()
+	f := cmd.Flags()
+	o.QPS = f.Float64("qps", *defaults.QPS, "Maximum Kubernetes API queries per second per collector")
+	o.Burst = f.Int("burst", *defaults.Burst, "Kubernetes API request burst per collector")
+	o.Parallel = f.Int("parallel", *defaults.Parallel, "Trivy scan parallelism; 0 selects automatically (not cluster concurrency)")
+	f.StringSliceVar(&o.ImageSrc, "image-src", defaults.ImageSrc, "Ordered image sources: docker,containerd,podman,remote")
+	f.StringVar(&o.CacheDir, "cache-dir", "", "Trivy cache directory on the collector host (default: Trivy cache)")
+	f.StringVar(&o.CACert, "cacert", "", "PEM CA certificate path on the collector host")
+	f.StringSliceVar(&o.DBRepository, "db-repository", defaults.DBRepository, "Ordered OCI vulnerability database mirrors")
+	f.StringSliceVar(&o.JavaDBRepository, "java-db-repository", defaults.JavaDBRepository, "Ordered OCI Java index database mirrors")
+	f.BoolVar(&o.SkipDBUpdate, "skip-db-update", false, "Use a preprovisioned vulnerability database without updating")
+	f.BoolVar(&o.SkipJavaDBUpdate, "skip-java-db-update", false, "Use a preprovisioned Java index database without updating")
 }

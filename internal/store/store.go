@@ -47,12 +47,23 @@ func Open(path string) (*Store, error) {
 	}
 	var version int
 	err = db.QueryRow("SELECT coalesce(max(version),0) FROM schema_version").Scan(&version)
-	if err == nil && version > 2 {
-		return fail(fmt.Errorf("database schema %d is newer than supported schema 2", version))
+	if err == nil && version > 3 {
+		return fail(fmt.Errorf("database schema %d is newer than supported schema 3", version))
 	}
 	tx, err := db.Begin()
 	if err != nil {
 		return fail(err)
+	}
+	if version > 0 && version < 3 {
+		for _, q := range []string{
+			"DROP VIEW IF EXISTS latest_inventory", "DROP VIEW IF EXISTS inventory_history", "DROP VIEW IF EXISTS latest_snapshots", "DROP VIEW IF EXISTS component_inventory",
+			"ALTER TABLE snapshots ADD COLUMN collection_options VARCHAR", "ALTER TABLE snapshots ADD COLUMN coverage_description VARCHAR", "ALTER TABLE snapshots ADD COLUMN namespaces VARCHAR",
+		} {
+			if _, err = tx.Exec(q); err != nil {
+				tx.Rollback()
+				return fail(err)
+			}
+		}
 	}
 	if _, err = tx.Exec(schema); err != nil {
 		tx.Rollback()
@@ -86,6 +97,21 @@ func (s *Store) Import(ctx context.Context, a model.Artifact) (string, error) {
 		return "", err
 	}
 	a.Namespaces = p.Namespaces
+	var optionsJSON any
+	if a.CollectionOptions != nil {
+		options := *a.CollectionOptions
+		if err := options.Normalize(a.Namespaces); err != nil {
+			return "", err
+		}
+		a.CollectionOptions = &options
+		raw, err := json.Marshal(options)
+		if err != nil {
+			return "", err
+		}
+		optionsJSON = string(raw)
+	}
+	namespacesJSON, _ := json.Marshal(a.Namespaces)
+	scope := model.CollectionScope(a.Namespaces, a.CollectionOptions)
 	a.Cluster.ID = model.ClusterID(a.Cluster.Name)
 	if a.CollectedAt.IsZero() {
 		return "", fmt.Errorf("collected_at is required")
@@ -97,7 +123,7 @@ func (s *Store) Import(ctx context.Context, a model.Artifact) (string, error) {
 	hash := sha256.Sum256(a.KBOM)
 	digest := hex.EncodeToString(hash[:])
 	// Re-importing the same artifact is idempotent, but later identical collections remain historical snapshots.
-	id := model.Key(a.Cluster.ID, model.Scope(a.Namespaces), a.CollectedAt.UTC().Format(time.RFC3339Nano), digest)
+	id := model.Key(a.Cluster.ID, scope, a.CollectedAt.UTC().Format(time.RFC3339Nano), digest)
 	s.write.Lock()
 	defer s.write.Unlock()
 	tx, err := s.DB.BeginTx(ctx, nil)
@@ -117,7 +143,7 @@ func (s *Store) Import(ctx context.Context, a model.Artifact) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	_, err = tx.ExecContext(ctx, "INSERT INTO snapshots(id,cluster_id,scope,collected_at,trivy_version,sha256,raw_json) VALUES (?,?,?,?,?,?,?)", id, a.Cluster.ID, model.Scope(a.Namespaces), a.CollectedAt, a.TrivyVersion, digest, string(a.KBOM))
+	_, err = tx.ExecContext(ctx, "INSERT INTO snapshots(id,cluster_id,scope,collected_at,trivy_version,sha256,raw_json,collection_options,coverage_description,namespaces) VALUES (?,?,?,?,?,?,?,?,?,?)", id, a.Cluster.ID, scope, a.CollectedAt, a.TrivyVersion, digest, string(a.KBOM), optionsJSON, model.CoverageDescription(a.Namespaces, a.CollectionOptions), string(namespacesJSON))
 	if err != nil {
 		return "", err
 	}
@@ -237,6 +263,9 @@ func (s *Store) Profiles(ctx context.Context) ([]model.Profile, error) {
 			return nil, err
 		}
 		if err = json.Unmarshal([]byte(b), &p); err != nil {
+			return nil, err
+		}
+		if err = p.Validate(); err != nil {
 			return nil, err
 		}
 		out = append(out, p)

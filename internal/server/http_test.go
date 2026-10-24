@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -153,5 +154,54 @@ func TestLocalOnly(t *testing.T) {
 				t.Fatalf("status = %d, want %d", w.Code, tc.status)
 			}
 		})
+	}
+}
+
+func TestCollectionOptionsAPI(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "db.duckdb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	handler := (&API{Store: s}).Handler()
+	request := func(method, path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		res := httptest.NewRecorder()
+		handler.ServeHTTP(res, httptest.NewRequest(method, "http://127.0.0.1/api/v1/"+path, strings.NewReader(body)))
+		return res
+	}
+	res := request("POST", "profiles", `{"name":"images","collection_options":{"scan_images":true,"parallel":0,"qps":2.5,"burst":4,"image_src":["remote"],"include_kinds":["Pod"],"exclude_namespaces":["dev"],"cache_dir":"/cache","cacert":"/ca.pem","db_repository":["mirror/db:2"],"java_db_repository":["mirror/java:1"],"skip_db_update":true,"skip_java_db_update":true,"offline_scan":true}}`)
+	if res.Code != 200 {
+		t.Fatalf("save: %s", res.Body.String())
+	}
+	var saved model.Profile
+	if err := json.Unmarshal(res.Body.Bytes(), &saved); err != nil {
+		t.Fatal(err)
+	}
+	if *saved.CollectionOptions.Parallel != 0 || saved.CollectionOptions.IncludeKinds[0] != "pod" {
+		t.Fatalf("save normalization: %+v", saved)
+	}
+	res = request("GET", "profiles", "")
+	var profiles []model.Profile
+	if err := json.Unmarshal(res.Body.Bytes(), &profiles); err != nil {
+		t.Fatal(err)
+	}
+	if len(profiles) != 1 || profiles[0].CollectionOptions.CACert != "/ca.pem" || !profiles[0].CollectionOptions.SkipDBUpdate {
+		t.Fatalf("read: %+v", profiles)
+	}
+	if res := request("POST", "profiles", `{"name":"bad","collection_options":{"parallel":-1}}`); res.Code != 400 {
+		t.Fatalf("invalid settings status: %d", res.Code)
+	}
+	a := model.Artifact{Cluster: model.Cluster{Name: "test"}, CollectedAt: time.Now().UTC(), CollectionOptions: &saved.CollectionOptions, KBOM: json.RawMessage(`{"bomFormat":"CycloneDX","specVersion":"1.6","components":[]}`)}
+	raw, _ := json.Marshal(a)
+	res = request("POST", "import", string(raw))
+	if res.Code != 200 {
+		t.Fatalf("import: %s", res.Body.String())
+	}
+	for _, endpoint := range []string{"snapshots", "scopes?cluster_id=" + model.ClusterID("test")} {
+		res = request("GET", endpoint, "")
+		if res.Code != 200 || !strings.Contains(res.Body.String(), "coverage:v1:") || !strings.Contains(res.Body.String(), "images scanned") {
+			t.Fatalf("%s: %s", endpoint, res.Body.String())
+		}
 	}
 }

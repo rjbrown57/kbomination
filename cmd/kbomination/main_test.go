@@ -96,3 +96,84 @@ func TestStandaloneImportUsesClusterName(t *testing.T) {
 		t.Fatal("no artifact was imported")
 	}
 }
+
+func TestImportCollectionOptions(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "kbom.json")
+	if err := os.WriteFile(path, []byte(`{"bomFormat":"CycloneDX","specVersion":"1.6","components":[]}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	received := make(chan model.Artifact, 4)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var a model.Artifact
+		if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
+			t.Error(err)
+		}
+		received <- a
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	run := func(args ...string) error {
+		cmd := root()
+		cmd.SetOut(io.Discard)
+		cmd.SetErr(io.Discard)
+		cmd.SetArgs(append(args, "--server", server.URL))
+		return cmd.Execute()
+	}
+	if err := run("import", path, "--cluster", "test", "--collected-at", "2026-10-24T00:00:00Z", "--scan-images", "--offline-scan", "--include-kinds", "Pod,service", "--exclude-namespaces", "z,dev"); err != nil {
+		t.Fatal(err)
+	}
+	a := <-received
+	if a.CollectionOptions == nil || !a.CollectionOptions.ScanImages || a.CollectionOptions.IncludeKinds[0] != "pod" || a.CollectionOptions.ExcludeNamespaces[0] != "dev" {
+		t.Fatalf("coverage lost: %+v", a)
+	}
+	for _, version := range []int{1, 2} {
+		options := a.CollectionOptions
+		if version == 1 {
+			options = nil
+		}
+		manifest := model.Manifest{Version: version, Entries: []model.ManifestEntry{{Artifact: model.Artifact{Cluster: model.Cluster{Name: "test"}, CollectedAt: a.CollectedAt, CollectionOptions: options}, File: "kbom.json", Status: "succeeded"}}}
+		raw, err := json.Marshal(manifest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		manifestPath := filepath.Join(dir, "manifest.json")
+		if err := os.WriteFile(manifestPath, raw, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := run("import", "--manifest", manifestPath); err != nil {
+			t.Fatal(err)
+		}
+		got := <-received
+		if (got.CollectionOptions == nil) != (version == 1) {
+			t.Fatalf("version %d coverage lost", version)
+		}
+		if err := run("import", "--manifest", manifestPath, "--scan-images"); err == nil {
+			t.Fatal("manifest override accepted")
+		}
+	}
+	if err := run("import", path, "--cluster", "test", "--collected-at", "2026-10-24T00:00:00Z", "--namespaces", "prod", "--exclude-namespaces", "prod"); err == nil {
+		t.Fatal("contradictory import accepted")
+	}
+}
+
+func TestCollectionFlagDefaults(t *testing.T) {
+	command, _, err := root().Find([]string{"collect"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := command.ParseFlags([]string{"--parallel=0", "--scan-images", "--image-src=remote,docker", "--qps=2.5"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, flag := range []string{"exclude-namespaces", "include-kinds", "exclude-kinds", "qps", "burst", "scan-images", "parallel", "image-src", "cache-dir", "cacert", "db-repository", "java-db-repository", "skip-db-update", "skip-java-db-update", "offline-scan"} {
+		if command.Flags().Lookup(flag) == nil {
+			t.Fatalf("missing flag %s", flag)
+		}
+	}
+	if got, _ := command.Flags().GetInt("parallel"); got != 0 {
+		t.Fatalf("parallel=%d", got)
+	}
+	if got, _ := command.Flags().GetInt("burst"); got != 10 {
+		t.Fatalf("burst=%d", got)
+	}
+}

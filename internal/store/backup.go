@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const backupVersion = 1
+const backupVersion = 2
 
 var backupTables = []string{"fleets", "clusters", "cluster_metadata", "component_catalog", "snapshots", "components", "component_properties", "dependencies", "component_catalog_observations", "profiles", "runs", "run_results", "app_settings"}
 
@@ -87,7 +87,7 @@ func DecodeBackup(r io.Reader) (Backup, backupData, error) {
 	if err := d.Decode(&b); err != nil {
 		return b, data, err
 	}
-	if b.Format != "kbomination-backup" || b.Version != backupVersion {
+	if b.Format != "kbomination-backup" || (b.Version != 1 && b.Version != backupVersion) {
 		return b, data, fmt.Errorf("unsupported backup format or version")
 	}
 	sum := sha256.Sum256(b.Data)

@@ -85,7 +85,7 @@ printf '%s' '{"bomFormat":"CycloneDX","specVersion":"1.6","components":[]}' > "$
 		t.Fatal(err)
 	}
 	args, _ := os.ReadFile(log)
-	for _, want := range []string{"trivy@" + model.TrivyVersion, "--disable-node-collector", "--include-namespaces\nkube-system", "--\ncontext with spaces"} {
+	for _, want := range []string{"trivy@" + model.TrivyVersion, "--disable-node-collector=true", "--skip-images=true", "--config=", "--parallel\n5", "--qps\n5", "--burst\n10", "--include-namespaces\nkube-system", "--\ncontext with spaces"} {
 		if !strings.Contains(string(args), want) {
 			t.Fatalf("missing argument %q: %s", want, args)
 		}

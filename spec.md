@@ -21,7 +21,11 @@ A golang based CLI that uses the trivy k8s functions to produce kboms and option
 The goal is to allow a fleet owner to visualize and query data about the fleet. For example find which distinct versions of coreDNS exist across the fleet. 
 
 ### Statements
-- should allow getting all namespaces, or a selected set
+- should allow getting all namespaces, a selected set, or excluding namespaces; allow included/excluded resource kinds
+- CLI and saved collection profiles expose Trivy API throttling, optional image scanning, scan parallelism, ordered image sources, cache/CA paths, database mirrors, update controls, and offline dependency identification
+- defaults retain image scanning skipped and node collection disabled; output remains CycloneDX and cluster concurrency remains two
+- persist normalized collection settings with snapshots and manifests; different namespace/kind coverage, image-scanning modes, and offline image dependency identification have separate latest-snapshot scopes
+- operational settings do not split inventory scope; historical settings that were not recorded remain explicitly unrecorded
 - clusters are connected to by kubeconfig for extraction of data
 - backend inventory, snapshots, and run results are keyed by the kubeconfig cluster entry name; contexts are access selections only
 - multiple matching contexts referencing one cluster produce one collection per run; the first matching context alphabetically is selected

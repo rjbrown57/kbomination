@@ -31,6 +31,14 @@ The server stores data in a persistent Docker volume that survives `local:down`.
 
 UI collection profiles use `${HOME}/.kube`, mounted read-only into the container. Override the source with `KBOMINATION_KUBE_DIR=/absolute/path/to/kube-directory mise run local:up`; credential plugins and external credential files must also be available inside the container. Host CLI collection uses your host’s kubeconfig and credentials.
 
+## Collector paths and private registries
+
+The profile editor's advanced settings apply on the server. For container collections, use `remote` as the image source unless a local runtime is deliberately made available. Mount a private CA read-only and enter its container path in **CA certificate**. Registry authentication must also be available to the collector; credential values are not stored in profiles.
+
+Set **Cache directory** to `/data/trivy-cache` to retain Trivy's cache in the existing persistent data volume. For internal database mirrors, enter ordered OCI repositories in the vulnerability and Java database fields. Disabling updates requires databases to be provisioned at that cache location first. Offline dependency identification does not disable Kubernetes access, registry pulls, or database updates.
+
+Host CLI collection can instead use host paths with `--cacert` and `--cache-dir`, then send artifacts to the container via `--ingest --server`. Restored profiles retain their original paths; review their mounts and credentials before resuming schedules.
+
 ## Manage the deployment
 
 ```sh

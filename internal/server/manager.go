@@ -127,7 +127,7 @@ func (m *Manager) Start(p model.Profile) (string, error) {
 		return "", err
 	}
 	if p.ID == "" {
-		p.ID = model.Key(p.Kubeconfig, p.ContextRegex, model.Scope(p.Namespaces))
+		p.ID = model.Key(p.Kubeconfig, p.ContextRegex, model.CollectionScope(p.Namespaces, &p.CollectionOptions))
 	}
 	m.mu.Lock()
 	if m.ctx.Err() != nil {

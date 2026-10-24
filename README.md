@@ -46,6 +46,39 @@ Open <http://127.0.0.1:8080>. The database defaults to `.data/kbomination.duckdb
 
 Create collection profiles in the UI for on-demand runs or schedules. Schedules use five-field cron expressions in UTC and run only while the local server is open. Missed runs are skipped. Collections run at most two clusters at once, default to a 15-minute timeout per cluster, and report partial fleet failures independently. A namespace-limited collection is stored as a separate scope and does not replace the all-namespace view. The server marks interrupted runs after a restart.
 
+### Collection controls
+
+The CLI and the Collections profile editor support the same Trivy settings. Defaults preserve the lightweight inventory collection: all kinds, image scanning skipped, and node collection disabled.
+
+| CLI flags | Default / behavior |
+| --- | --- |
+| `--exclude-namespaces` | No exclusions; cannot overlap `--namespaces` |
+| `--include-kinds`, `--exclude-kinds` | No restrictions; comma-separated Kubernetes kinds |
+| `--qps`, `--burst` | 5 API requests/second and burst 10, per collector |
+| `--scan-images` | False; opt into image downloads and scanning |
+| `--parallel` | 5 scan workers per Trivy process; 0 selects automatically |
+| `--image-src` | `docker,containerd,podman,remote`, in priority order |
+| `--cache-dir`, `--cacert` | Trivy's default cache directory; no extra PEM CA file |
+| `--db-repository`, `--java-db-repository` | Trivy 0.76.0 defaults: Google mirror then GHCR; ordered comma-separated OCI repositories |
+| `--skip-db-update`, `--skip-java-db-update` | False; enabling requires preprovisioned databases |
+| `--offline-scan` | False; disables dependency-identification API requests, not Kubernetes or registry access |
+
+For example:
+
+```sh
+kbomination collect --context-regex '^prod-' \
+  --exclude-namespaces sandbox --include-kinds deployment,daemonset \
+  --qps 3 --burst 6 --scan-images --image-src remote --parallel 2 --ingest
+```
+
+Image scanning increases work and may produce artifacts exceeding the existing 64 MiB import limit. Scan parallelism does not change the two-cluster collection limit. Paths belong to the collector process: host CLI paths are local; UI and scheduled collections use server/container paths. Credentials continue to come from kubeconfig plugins, registry authentication, and credential environment variables. Trivy configuration files and non-credential `TRIVY_*` environment settings are ignored; configure collection behavior through these flags or profiles. The permitted Trivy credential variables are `TRIVY_USERNAME`, `TRIVY_PASSWORD`, `TRIVY_REGISTRY_TOKEN`, `TRIVY_TOKEN`, and `TRIVY_GITHUB_TOKEN`; other process environment variables remain available.
+
+Snapshots retain normalized `collection_options` and a readable coverage description. Namespace/kind filters, image scanning, and offline dependency identification when images are scanned define separate inventory scopes. Throttling, source priority, cache paths, CA paths, and database settings are recorded but do not split scopes. Default coverage retains the existing `all` / `namespaces:…` scope keys; other coverage uses stable `coverage:v1:…` keys. The overview shows default-coverage snapshots only. Historical settings that were not recorded are labeled accordingly.
+
+New collections write version-2 manifests. Imports accept versions 1 and 2; manifest coverage cannot be overridden with CLI flags. Standalone imports accept `--namespaces`, `--exclude-namespaces`, `--include-kinds`, `--exclude-kinds`, `--scan-images`, and `--offline-scan` to declare coverage. Without coverage flags their additional settings remain unrecorded.
+
+Opening an existing database upgrades its schema to version 3 without changing existing snapshot IDs or scope keys. Backups now use version 2 and include collection settings; restore accepts versions 1 and 2. Older binaries cannot open the upgraded database or consume the new manifest/backup versions.
+
 ### Inventory and queries
 
 The UI offers filters for cluster, snapshot, namespace, category, component, version, and collection scope. It shows only information present in Trivy's KBOM; unavailable resource metadata appears as unknown. Historical snapshots remain available.

@@ -136,6 +136,13 @@ paths:
       responses:
         '200': { description: Restored data; scheduler is paused }
         '409': { description: Collection is still active }
+  /scopes:
+    get:
+      summary: List latest coverage scopes and readable descriptions for a cluster
+      parameters:
+        - { in: query, name: cluster_id, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Tabular scope and coverage_description columns }
   /snapshots:
     get:
       parameters:
@@ -144,13 +151,13 @@ paths:
         - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 1000, default: 100 } }
         - { in: query, name: offset, schema: { type: integer, minimum: 0, default: 0 } }
       responses:
-        '200': { description: Snapshot history }
+        '200': { description: Snapshot history including JSON-encoded namespaces and collection_options (null for unrecorded settings) and readable coverage_description }
   /snapshots/{id}:
     get:
       parameters:
         - { in: path, name: id, required: true, schema: { type: string } }
       responses:
-        '200': { description: Snapshot including original CycloneDX JSON }
+        '200': { description: Snapshot including original CycloneDX JSON and recorded collection options and coverage description }
   /components:
     get:
       parameters:
@@ -193,6 +200,34 @@ paths:
         '400': { description: Invalid or disallowed query }
 components:
   schemas:
+    CollectionOptions:
+      type: object
+      description: Normalized Trivy settings. Paths refer to the collector host. Missing values use pinned Trivy defaults; parallel zero means automatic. Namespace/kind include and exclude lists must not overlap.
+      properties:
+        exclude_namespaces: { type: array, items: { type: string } }
+        include_kinds: { type: array, items: { type: string } }
+        exclude_kinds: { type: array, items: { type: string } }
+        qps: { type: number, exclusiveMinimum: 0, default: 5 }
+        burst: { type: integer, minimum: 1, default: 10 }
+        parallel: { type: integer, minimum: 0, default: 5 }
+        scan_images: { type: boolean, default: false }
+        image_src:
+          type: array
+          items: { type: string, enum: [docker, containerd, podman, remote] }
+          default: [docker, containerd, podman, remote]
+        cache_dir: { type: string }
+        cacert: { type: string }
+        db_repository:
+          type: array
+          items: { type: string }
+          default: ['mirror.gcr.io/aquasec/trivy-db:2', 'ghcr.io/aquasecurity/trivy-db:2']
+        java_db_repository:
+          type: array
+          items: { type: string }
+          default: ['mirror.gcr.io/aquasec/trivy-java-db:1', 'ghcr.io/aquasecurity/trivy-java-db:1']
+        skip_db_update: { type: boolean, default: false }
+        skip_java_db_update: { type: boolean, default: false }
+        offline_scan: { type: boolean, default: false, description: Disables dependency-identification API requests; Kubernetes access is still required. }
     Profile:
       type: object
       required: [name]
@@ -202,6 +237,7 @@ components:
         kubeconfig: { type: string }
         context_regex: { type: string, default: '.*' }
         namespaces: { type: array, items: { type: string } }
+        collection_options: { $ref: '#/components/schemas/CollectionOptions' }
         cron: { type: string, description: Five-field UTC cron expression }
         enabled: { type: boolean }
         timeout_seconds: { type: integer, minimum: 1, maximum: 86400, default: 900 }
@@ -217,6 +253,7 @@ components:
             source: { type: string, description: "Optional provenance; not part of cluster identity" }
             server: { type: string }
         namespaces: { type: array, items: { type: string } }
+        collection_options: { $ref: '#/components/schemas/CollectionOptions' }
         collected_at: { type: string, format: date-time }
         trivy_version: { type: string }
         kbom: { type: object, description: CycloneDX document }

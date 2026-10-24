@@ -95,7 +95,10 @@ type Collector interface {
 type Trivy struct{}
 
 func (Trivy) Collect(ctx context.Context, p model.Profile, c Target) (model.Artifact, error) {
-	a := model.Artifact{Cluster: c.Cluster, Namespaces: p.Namespaces, CollectedAt: time.Now().UTC(), TrivyVersion: model.TrivyVersion}
+	if err := p.Validate(); err != nil {
+		return model.Artifact{}, err
+	}
+	a := model.Artifact{Cluster: c.Cluster, Namespaces: p.Namespaces, CollectionOptions: &p.CollectionOptions, CollectedAt: time.Now().UTC(), TrivyVersion: model.TrivyVersion}
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(p.TimeoutSeconds)*time.Second)
 	defer cancel()
 	dir, err := os.MkdirTemp("", "kbomination-")
@@ -104,7 +107,8 @@ func (Trivy) Collect(ctx context.Context, p model.Profile, c Target) (model.Arti
 	}
 	defer os.RemoveAll(dir)
 	output := filepath.Join(dir, "kbom.json")
-	args := []string{"exec", "trivy@" + model.TrivyVersion, "--", "trivy", "k8s", "--format", "cyclonedx", "--disable-node-collector", "--skip-images", "--scanners", "vuln", "--timeout", fmt.Sprintf("%ds", p.TimeoutSeconds), "--output", output}
+	args := []string{"exec", "trivy@" + model.TrivyVersion, "--", "trivy", "k8s", "--config=", "--format", "cyclonedx", "--disable-node-collector=true", "--scanners", "vuln", "--timeout", fmt.Sprintf("%ds", p.TimeoutSeconds), "--output", output}
+	args = append(args, trivyOptions(p.CollectionOptions)...)
 	if len(p.Namespaces) > 0 {
 		args = append(args, "--include-namespaces", strings.Join(p.Namespaces, ","))
 	}
@@ -114,7 +118,7 @@ func (Trivy) Collect(ctx context.Context, p model.Profile, c Target) (model.Arti
 	args = append(args, "--", c.Context)
 	cmd := exec.CommandContext(ctx, "mise", args...)
 	// Use the resolved source for both explicit paths and merged KUBECONFIG sources.
-	cmd.Env = append(os.Environ(), "KUBECONFIG="+c.Source)
+	cmd.Env = append(trivyEnvironment(os.Environ()), "KUBECONFIG="+c.Source)
 	// Do not persist subprocess stderr: credential plugins may print credentials.
 	if err = cmd.Run(); err != nil {
 		if ctx.Err() != nil {
@@ -131,4 +135,48 @@ func (Trivy) Collect(ctx context.Context, p model.Profile, c Target) (model.Arti
 	}
 	a.KBOM, err = os.ReadFile(output)
 	return a, err
+}
+
+func trivyOptions(o model.CollectionOptions) []string {
+	args := []string{fmt.Sprintf("--skip-images=%t", !o.ScanImages), "--qps", fmt.Sprint(*o.QPS), "--burst", fmt.Sprint(*o.Burst), "--parallel", fmt.Sprint(*o.Parallel), fmt.Sprintf("--skip-db-update=%t", o.SkipDBUpdate), fmt.Sprintf("--skip-java-db-update=%t", o.SkipJavaDBUpdate), fmt.Sprintf("--offline-scan=%t", o.OfflineScan)}
+	for _, item := range []struct {
+		flag   string
+		values []string
+	}{
+		{"--exclude-namespaces", o.ExcludeNamespaces}, {"--include-kinds", o.IncludeKinds}, {"--exclude-kinds", o.ExcludeKinds},
+		{"--image-src", o.ImageSrc}, {"--db-repository", o.DBRepository}, {"--java-db-repository", o.JavaDBRepository},
+	} {
+		if len(item.values) > 0 {
+			args = append(args, item.flag, strings.Join(item.values, ","))
+		}
+	}
+	if o.CacheDir != "" {
+		args = append(args, "--cache-dir", o.CacheDir)
+	}
+	if o.CACert != "" {
+		args = append(args, "--cacert", o.CACert)
+	}
+	return args
+}
+
+// Preserve registry credentials and the normal process environment (including
+// kubeconfig exec-plugin credentials and proxies), but do not let ambient
+// Trivy options silently change the recorded collection coverage.
+func trivyEnvironment(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, value := range env {
+		key, _, _ := strings.Cut(value, "=")
+		if key == "KUBECONFIG" {
+			continue
+		}
+		if strings.HasPrefix(key, "TRIVY_") {
+			switch key {
+			case "TRIVY_USERNAME", "TRIVY_PASSWORD", "TRIVY_REGISTRY_TOKEN", "TRIVY_TOKEN", "TRIVY_GITHUB_TOKEN":
+			default:
+				continue
+			}
+		}
+		out = append(out, value)
+	}
+	return out
 }
